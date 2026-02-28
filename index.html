@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/pdao-logo2-circular.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDAO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Lora', 'serif'],
+            },
+            colors: {
+              slate: {
+                850: '#1e293b',
+                950: '#020617',
+              }
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      body, div, nav, header, aside, section, article {
+        transition-property: background-color, border-color, color;
+        transition-duration: 200ms;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+      .dark ::-webkit-scrollbar-thumb { background: #334155; }
+      .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideInFromBottom {
+        from { transform: translateY(1rem); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-in {
+        animation-duration: 500ms;
+        animation-fill-mode: both;
+      }
+      .fade-in {
+        animation-name: fadeIn;
+      }
+      .slide-in-from-bottom-4 {
+        animation-name: slideInFromBottom;
+      }
+      .animate-fadeIn {
+        animation: fadeIn 0.4s ease-out;
+      }
+
+      /* High Contrast Mode (Yellow on Black) */
+      .high-contrast {
+        --hc-bg: #000000;
+        --hc-fg: #FFD700;
+        --hc-border: #FFD700;
+      }
+      .high-contrast body,
+      .high-contrast .bg-white,
+      .high-contrast .bg-slate-50,
+      .high-contrast .bg-slate-100 {
+        background-color: #000000 !important;
+        color: #FFD700 !important;
+      }
+      .high-contrast .bg-gradient-to-br,
+      .high-contrast .bg-gradient-to-b {
+        background: #111111 !important;
+      }
+      .high-contrast .text-slate-800,
+      .high-contrast .text-slate-700,
+      .high-contrast .text-slate-600,
+      .high-contrast .text-slate-500,
+      .high-contrast .text-slate-400,
+      .high-contrast .text-white,
+      .high-contrast p,
+      .high-contrast h1,
+      .high-contrast h2,
+      .high-contrast h3,
+      .high-contrast h4,
+      .high-contrast span,
+      .high-contrast label {
+        color: #FFD700 !important;
+      }
+      .high-contrast .border-slate-200,
+      .high-contrast .border-slate-700,
+      .high-contrast .border-blue-700\/30 {
+        border-color: #FFD700 !important;
+      }
+      .high-contrast button {
+        border-color: #FFD700 !important;
+        color: #FFD700 !important;
+      }
+      .high-contrast input,
+      .high-contrast select,
+      .high-contrast textarea {
+        background-color: #111111 !important;
+        color: #FFD700 !important;
+        border-color: #FFD700 !important;
+      }
+      .high-contrast a { color: #FFD700 !important; text-decoration: underline; }
+
+      /* Screen reader simplified mode */
+      [data-screen-reader="true"] .shadow-sm,
+      [data-screen-reader="true"] .shadow-lg,
+      [data-screen-reader="true"] .shadow-xl,
+      [data-screen-reader="true"] .shadow-2xl {
+        box-shadow: none !important;
+      }
+      [data-screen-reader="true"] .rounded-2xl,
+      [data-screen-reader="true"] .rounded-xl {
+        border-radius: 4px !important;
+      }
+      [data-screen-reader="true"] .backdrop-blur-sm,
+      [data-screen-reader="true"] .backdrop-blur-xl {
+        backdrop-filter: none !important;
+      }
+    </style>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white antialiased selection:bg-blue-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+</body>
+</html>

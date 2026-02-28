@@ -1,0 +1,32 @@
+{
+  "name": "person-with-disability-affairs-office-system",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k --raw --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"cmd /c start-backend.bat\" \"vite\"",
+    "dev:frontend": "vite",
+    "dev:backend": "start-backend.bat",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "date-fns": "^4.1.0",
+    "jspdf": "^4.2.0",
+    "lucide-react": "0.460.0",
+    "react": "^19.2.4",
+    "react-day-picker": "^9.13.0",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^6.21.0",
+    "recharts": "2.15.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
