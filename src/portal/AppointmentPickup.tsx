@@ -223,8 +223,9 @@ const AppointmentPickupContent: React.FC<Omit<AppointmentPickupProps, 'applicati
   };
 
   const formatDate = (day: number) => {
-    const d = new Date(currentYear, currentMonth, day);
-    return d.toISOString().split('T')[0];
+    const month = String(currentMonth + 1).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    return `${currentYear}-${month}-${d}`;
   };
 
   // ── Book appointment ──

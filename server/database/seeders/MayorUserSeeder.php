@@ -16,7 +16,8 @@ class MayorUserSeeder extends Seeder
                 'first_name' => 'Mayor',
                 'last_name' => 'User',
                 'password' => 'mayor',
-                'role' => 'ADMIN', // or another allowed value, since 'MAYOR' is not in the enum
+                'role' => 'MAYOR',
+                'unit' => 'PDAO Central',
                 'status' => 'ACTIVE',
             ]
         );

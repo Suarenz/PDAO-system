@@ -330,7 +330,13 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
     /** Map field id to its display value */
     const valueMap: Record<string, string> = {
       fullName,
-      disability: (pwdData.disabilities || []).map(d => clean(d.disability_type_name)).filter(Boolean).join(', '),
+      disability: (pwdData.disabilities || []).map(d => {
+        const name = clean(d.disability_type_name);
+        if (name && name.toLowerCase() === 'other' && d.cause_details) {
+          return clean(d.cause_details);
+        }
+        return name;
+      }).filter(Boolean).join(', '),
       pwdNumber: clean(pwdData.pwd_number),
       address,
       dob,
@@ -343,16 +349,21 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
 
     /** Convert a DB layout item (cqw units) to modal LayoutItem (px units for 540px container) */
     const CQW_TO_PX = 5.4; // 540px / 100
+    // Canonical photo defaults (% of card dimensions, 540×340px container)
+    const PHOTO_DEFAULT = { top: 47, left: 6.5, width: 27.5, height: 43.5 };
+
     const toModalItem = (dbItem: IdCardLayoutItem, side: 'front' | 'back'): LayoutItem => {
       if (dbItem.id === 'photo') {
+        // Use the saved DB template values so the photo placeholder matches
+        // exactly what was configured in the ID Card Layout Editor.
         return {
           id: dbItem.id,
           label: dbItem.label,
           value: '',
-          top: dbItem.top,
-          left: dbItem.left,
-          width: dbItem.maxWidth || 27.5,
-          height: (dbItem as any).maxHeight || 43.5,
+          top: dbItem.top ?? PHOTO_DEFAULT.top,
+          left: dbItem.left ?? PHOTO_DEFAULT.left,
+          width: dbItem.maxWidth ?? PHOTO_DEFAULT.width,
+          height: dbItem.maxHeight ?? PHOTO_DEFAULT.height,
           fontSize: 0,
           zoom: 1,
           offsetX: 0,
@@ -680,7 +691,7 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
                 className="relative shadow-2xl overflow-hidden ring-4 ring-white dark:ring-slate-800 select-none bg-white flex-shrink-0"
                 style={{
                   width: '540px',
-                  height: '340px',
+                  aspectRatio: '85.6 / 53.98',
                   backgroundImage: `url('${activeTab === 'front' ? (frontImageUrl || '/pdao-id-front.jpg') : (backImageUrl || '/pdao-id-back.jpg')}')`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',

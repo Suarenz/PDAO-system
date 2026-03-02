@@ -611,9 +611,21 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
                     {selectedApproval.pwd_profile.disabilities && selectedApproval.pwd_profile.disabilities.length > 0 ? (
                       <div className="flex flex-wrap gap-3">
                         {selectedApproval.pwd_profile.disabilities.map((d: any, idx: number) => (
-                          <span key={idx} className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-bold">
-                            {d.disability_type?.name}
-                          </span>
+                          <div key={idx} className="flex flex-col gap-1">
+                            <span className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-bold">
+                              {d.disability_type?.name === 'Other' && d.cause_details ? d.cause_details : (d.disability_type?.name || d.disability_type_name)}
+                            </span>
+                            {d.cause && (
+                              <span className="px-4 py-1 text-xs text-slate-500 dark:text-slate-400">
+                                Cause: {d.cause}
+                              </span>
+                            )}
+                            {d.cause_details && (
+                              <span className="px-4 py-1 text-xs text-slate-500 dark:text-slate-400">
+                                Details: {d.cause_details}
+                              </span>
+                            )}
+                          </div>
                         ))}
                       </div>
                     ) : (

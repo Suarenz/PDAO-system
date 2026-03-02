@@ -146,8 +146,8 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
 
     // Validation for Step 2
     if (currentStep === 2) {
-      if (formData.disabilityType.length === 0) {
-        showAlert('Validation Error', 'Please select at least one Type of Disability.', 'warning');
+      if (formData.disabilityType.length === 0 && !formData.otherCause.trim()) {
+        showAlert('Validation Error', 'Please select at least one Type of Disability or specify in Others (Specify).', 'warning');
         return;
       }
     }
@@ -196,7 +196,14 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
       const barangayId = barangays.find(b => b.name === formData.barangay)?.id || null;
 
       // Map disability types to their IDs
-      const disabilities = formData.disabilityType
+      // If otherCause is specified but 'Other' is not already selected, auto-include it
+      const disabilityTypeList = [...formData.disabilityType];
+      const otherDisabilityType = disabilityTypes.find(dt => dt.name === 'Other');
+      if (formData.otherCause.trim() && otherDisabilityType && !disabilityTypeList.includes('Other')) {
+        disabilityTypeList.push('Other');
+      }
+
+      const disabilities = disabilityTypeList
         .map(typeName => {
           const disabilityType = disabilityTypes.find(dt => dt.name === typeName);
           if (!disabilityType) return null;
@@ -208,8 +215,9 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
           } else if (formData.causeOfDisability === 'Congenital') {
             causeDetails = formData.congenitalDetails.join(', ');
           }
-          if (formData.otherCause) {
-            causeDetails = causeDetails ? `${causeDetails}, ${formData.otherCause}` : formData.otherCause;
+          // Only add otherCause to the 'Other' disability type entry
+          if (typeName === 'Other' && formData.otherCause) {
+            causeDetails = formData.otherCause;
           }
 
           return {

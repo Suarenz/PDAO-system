@@ -101,8 +101,8 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({ item, value, isPhoto, pho
         style={{
           top: `${item.top}%`,
           left: `${item.left}%`,
-          width: `${item.maxWidth || 27.5}%`,
-          height: `${item.maxHeight || 43.5}%`,
+          width: `${item.maxWidth ?? 27.5}%`,
+          height: `${item.maxHeight ?? 43.5}%`,
         }}
       >
         <div className="w-full h-full bg-slate-100 border border-black/50 shadow-inner flex items-center justify-center overflow-hidden">

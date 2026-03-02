@@ -128,6 +128,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Check if user is mayor.
+     */
+    public function isMayor(): bool
+    {
+        return $this->role === 'MAYOR';
+    }
+
+    /**
      * Check if user has specific role.
      */
     public function hasRole(string|array $roles): bool

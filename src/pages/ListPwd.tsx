@@ -130,6 +130,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
     province: '',
     region: '',
     disability_type_id: 0,
+    disability_details: '',
     disability_cause: '',
     employment_status: '',
     employment_category: '',
@@ -194,8 +195,13 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           disabilityNames.push(pwd.disability_type);
         } else if (pwd.disabilities && pwd.disabilities.length > 0) {
           pwd.disabilities.forEach((d: any) => {
-            const name = d.disability_type?.name || d.disability_type_name;
-            if (name) disabilityNames.push(name);
+            const typeName = d.disability_type?.name || d.disability_type_name;
+            // If type is 'Other', show the user-specified cause_details instead
+            if (typeName === 'Other' && d.cause_details) {
+              disabilityNames.push(d.cause_details);
+            } else if (typeName) {
+              disabilityNames.push(typeName);
+            }
           });
         }
         if (disabilityNames.length === 0) {
@@ -373,6 +379,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
         province: data.address?.province || 'Laguna',
         region: data.address?.region || '4A',
         disability_type_id: data.disabilities?.[0]?.disability_type_id || 0,
+        disability_details: data.disabilities?.[0]?.cause_details || '',
         disability_cause: data.disabilities?.[0]?.cause || '',
         employment_status: data.employment?.status || '',
         employment_category: data.employment?.category || '',
@@ -498,7 +505,8 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
         },
         disabilities: editForm.disability_type_id ? [{
           disability_type_id: editForm.disability_type_id,
-          cause: editForm.disability_cause as 'Acquired' | 'Congenital' | null
+          cause: editForm.disability_cause as 'Acquired' | 'Congenital' | null,
+          cause_details: editForm.disability_details || null
         }] : undefined,
         employment: {
           status: editForm.employment_status || null,
@@ -1206,7 +1214,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <div className="flex flex-wrap gap-3">
                         {selectedPwd.disabilities.map((d, idx) => (
                           <span key={idx} className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-bold">
-                            {d.disability_type_name}
+                            {d.disability_type_name === 'Other' && d.cause_details ? d.cause_details : d.disability_type_name}
                           </span>
                         ))}
                       </div>
@@ -1581,6 +1589,18 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                           {lookups?.disability_types.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
                         </select>
                       </div>
+                      {lookups?.disability_types.find(d => d.id === editForm.disability_type_id)?.name === 'Other' && (
+                        <div>
+                          <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Other Disability (Specify)</label>
+                          <input 
+                            type="text" 
+                            value={editForm.disability_details} 
+                            onChange={(e) => setEditForm({...editForm, disability_details: e.target.value})}
+                            placeholder="Specify disability type..."
+                            className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none" 
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Cause</label>
                         <select value={editForm.disability_cause} onChange={(e) => setEditForm({...editForm, disability_cause: e.target.value})}

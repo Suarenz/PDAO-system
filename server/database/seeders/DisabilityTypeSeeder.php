@@ -74,6 +74,11 @@ class DisabilityTypeSeeder extends Seeder
                 'code' => 'CHR',
                 'description' => 'Chronic illnesses causing long-term disability',
             ],
+            [
+                'name' => 'Other',
+                'code' => 'OTH',
+                'description' => 'Other types of disability not listed above (user-specified)',
+            ],
         ];
 
         foreach ($disabilityTypes as $type) {

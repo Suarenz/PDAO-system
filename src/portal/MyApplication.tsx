@@ -262,7 +262,8 @@ const MyApplication: React.FC<MyApplicationProps> = ({
         }
         break;
       case 2: // Disability
-        if (!formData.disabilityType) errors.push('Type of Disability is required');
+        if (!formData.disabilityType && !formData.disabilityTypeSpecify.trim()) errors.push('Type of Disability is required (select from list or specify in Others)');
+        if (formData.disabilityType === 'Other' && !formData.disabilityTypeSpecify.trim()) errors.push('Please specify your disability in Others (Specify)');
         if (!formData.causeOfDisability) errors.push('Cause of Disability is required');
         break;
       case 3: // Employment - no required fields
@@ -308,11 +309,14 @@ const MyApplication: React.FC<MyApplicationProps> = ({
       const barangayId = barangays.find(b => b.name === formData.barangay)?.id || null;
 
       // Find disability type ID
-      const disabilityType = disabilityTypes.find(dt => dt.name === formData.disabilityType);
+      // If no type selected but specify is filled, use 'Other' type automatically
+      const disabilityTypeName = formData.disabilityType ||
+        (formData.disabilityTypeSpecify.trim() ? 'Other' : '');
+      const disabilityType = disabilityTypes.find(dt => dt.name === disabilityTypeName);
       const disabilities = disabilityType ? [{
         disability_type_id: disabilityType.id,
         cause: formData.causeOfDisability as 'Acquired' | 'Congenital' | null || null,
-        cause_details: formData.disabilityType === 'Other' ? formData.disabilityTypeSpecify : null,
+        cause_details: formData.disabilityTypeSpecify.trim() || null,
       }] : undefined;
 
       // Build family members array
@@ -466,10 +470,16 @@ const MyApplication: React.FC<MyApplicationProps> = ({
       case 2: // Disability
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SelectField label="Type of Disability" value={formData.disabilityType} onChange={(v) => updateField('disabilityType', v)} options={disabilityTypes.map(dt => dt.name)} required disabled={isFieldDisabled('disabilityType')} highlighted={isFieldHighlighted('disabilityType')} />
-            {formData.disabilityType === 'Other' && (
-              <InputField label="Others (Specify)" value={formData.disabilityTypeSpecify} onChange={(v) => updateField('disabilityTypeSpecify', v)} required disabled={isFieldDisabled('disabilityTypeSpecify')} highlighted={isFieldHighlighted('disabilityTypeSpecify')} />
-            )}
+            <SelectField label="Type of Disability" value={formData.disabilityType} onChange={(v) => updateField('disabilityType', v)} options={disabilityTypes.map(dt => dt.name)} required={!formData.disabilityTypeSpecify.trim()} disabled={isFieldDisabled('disabilityType')} highlighted={isFieldHighlighted('disabilityType')} />
+            <InputField
+              label="Others (Specify)"
+              value={formData.disabilityTypeSpecify}
+              onChange={(v) => updateField('disabilityTypeSpecify', v)}
+              required={formData.disabilityType === 'Other'}
+              disabled={isFieldDisabled('disabilityTypeSpecify')}
+              highlighted={isFieldHighlighted('disabilityTypeSpecify')}
+              placeholder="Specify if not in list"
+            />
             <SelectField label="Cause of Disability" value={formData.causeOfDisability} onChange={(v) => updateField('causeOfDisability', v)} options={['Congenital', 'Acquired']} required disabled={isFieldDisabled('causeOfDisability')} highlighted={isFieldHighlighted('causeOfDisability')} />
           </div>
         );
@@ -575,9 +585,9 @@ const MyApplication: React.FC<MyApplicationProps> = ({
                 { label: 'Email', value: formData.email || 'N/A' },
               ]},
               { title: 'Disability', fields: [
-                { label: 'Type', value: formData.disabilityType },
+                { label: 'Type', value: formData.disabilityType || (formData.disabilityTypeSpecify.trim() ? 'Other' : '') },
                 { label: 'Cause', value: formData.causeOfDisability },
-                ...(formData.disabilityType === 'Other' ? [{ label: 'Specified', value: formData.disabilityTypeSpecify }] : [])
+                ...(formData.disabilityTypeSpecify.trim() ? [{ label: 'Others (Specify)', value: formData.disabilityTypeSpecify }] : [])
               ]},
               { title: 'Employment', fields: [
                 { label: 'Education', value: formData.educationalAttainment || 'N/A' },

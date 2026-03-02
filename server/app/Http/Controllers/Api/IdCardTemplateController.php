@@ -14,7 +14,7 @@ class IdCardTemplateController extends Controller
      * Default front layout – used when no DB template exists yet.
      */
     private const DEFAULT_FRONT = [
-        ['id' => 'photo',     'label' => 'Photo',      'top' => 47,   'left' => 6.5,  'fontSize' => 0,   'maxWidth' => 27.5],
+        ['id' => 'photo',     'label' => 'Photo',      'top' => 47,   'left' => 6.5,  'fontSize' => 0,   'maxWidth' => 27.5, 'maxHeight' => 43.5],
         ['id' => 'fullName',  'label' => 'Full Name',   'top' => 52,   'left' => 64.5, 'fontSize' => 2.8, 'maxWidth' => null],
         ['id' => 'disability','label' => 'Disability',   'top' => 66,   'left' => 64.5, 'fontSize' => 2.4, 'maxWidth' => null],
         ['id' => 'pwdNumber', 'label' => 'PWD Number',   'top' => 91.5, 'left' => 20.5, 'fontSize' => 2.1, 'maxWidth' => null],
@@ -98,6 +98,7 @@ class IdCardTemplateController extends Controller
             'styles.*.left'     => 'required|numeric',
             'styles.*.fontSize' => 'required|numeric|min:0',
             'styles.*.maxWidth' => 'nullable|numeric',
+            'styles.*.maxHeight' => 'nullable|numeric',
             'template_name'     => 'nullable|string|max:100',
         ]);
 
@@ -143,6 +144,7 @@ class IdCardTemplateController extends Controller
             'front.*.left'     => 'required|numeric',
             'front.*.fontSize' => 'required|numeric|min:0',
             'front.*.maxWidth' => 'nullable|numeric',
+            'front.*.maxHeight' => 'nullable|numeric',
             'back'             => 'required|array|min:1',
             'back.*.id'        => 'required|string',
             'back.*.label'     => 'required|string',
@@ -150,6 +152,7 @@ class IdCardTemplateController extends Controller
             'back.*.left'      => 'required|numeric',
             'back.*.fontSize'  => 'required|numeric|min:0',
             'back.*.maxWidth'  => 'nullable|numeric',
+            'back.*.maxHeight' => 'nullable|numeric',
             'template_name'    => 'nullable|string|max:100',
         ]);
 

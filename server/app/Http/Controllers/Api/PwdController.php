@@ -691,7 +691,6 @@ class PwdController extends Controller
                     ->orderBy('name')
                     ->get(['id', 'name', 'code']),
                 'disability_types' => DisabilityType::where('is_active', true)
-                    ->where('name', '!=', 'Other')
                     ->orderBy('name')
                     ->get(['id', 'name', 'code']),
             ],
@@ -898,6 +897,7 @@ class PwdController extends Controller
                     'name' => $d->disabilityType->name,
                 ] : null,
                 'cause' => $d->cause,
+                'cause_details' => $d->cause_details,
                 'is_primary' => $d->is_primary,
             ])->toArray(),
             'disability_type' => (($primary = $profile->disabilities->first()) && $primary->disabilityType?->name === 'Other' && $primary->cause_details) 

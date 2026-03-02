@@ -229,7 +229,9 @@ const UserPortal: React.FC<UserPortalProps> = ({ userId, userName, userEmail, us
               dateOfBirth: app.dob || app.dateOfBirth || app.birth_date || 'N/A', 
               sex: app.sex || app.gender || 'N/A',
               address: address || 'N/A',
-              disabilityType: app.disabilityType || app.disability_type || 'N/A',
+              disabilityType: ((app.disabilityType || app.disability_type || '') === 'Other' && (app.disabilityTypeSpecify || app.disability_type_specify))
+                ? (app.disabilityTypeSpecify || app.disability_type_specify)
+                : (app.disabilityType || app.disability_type || 'N/A'),
               bloodType: app.bloodType || app.blood_type || 'N/A',
               photo: app.photo || data.photo, 
               dateIssued: (data.dateApproved || data.date_approved) ? new Date(data.dateApproved || data.date_approved).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),

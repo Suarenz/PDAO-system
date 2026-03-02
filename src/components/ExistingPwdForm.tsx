@@ -83,6 +83,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
     province: '',
     region: '',
     disability_type_id: 0,
+    disability_details: '',
     disability_cause: '',
     employment_status: '',
     employment_category: '',
@@ -174,6 +175,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
           province: pwdData.address?.province || 'Laguna',
           region: pwdData.address?.region || '4A',
           disability_type_id: pwdData.disabilities?.[0]?.disability_type_id || 0,
+          disability_details: pwdData.disabilities?.[0]?.cause_details || '',
           disability_cause: pwdData.disabilities?.[0]?.cause || '',
           employment_status: pwdData.employment?.status || '',
           employment_category: pwdData.employment?.category || '',
@@ -323,7 +325,8 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
         },
         disabilities: editForm.disability_type_id ? [{
           disability_type_id: editForm.disability_type_id,
-          cause: editForm.disability_cause as 'Acquired' | 'Congenital' | null
+          cause: editForm.disability_cause as 'Acquired' | 'Congenital' | null,
+          cause_details: editForm.disability_details || null
         }] : undefined,
         employment: {
           status: editForm.employment_status || null,
@@ -727,6 +730,18 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
                   {lookups?.disability_types.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
                 </select>
               </div>
+              {lookups?.disability_types.find(d => d.id === editForm.disability_type_id)?.name === 'Other' && (
+                <div>
+                  <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Other Disability (Specify)</label>
+                  <input 
+                    type="text" 
+                    value={editForm.disability_details} 
+                    onChange={(e) => setEditForm({...editForm, disability_details: e.target.value})}
+                    placeholder="Specify disability type..."
+                    className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none" 
+                  />
+                </div>
+              )}
               <div>
                 <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Cause</label>
                 <select value={editForm.disability_cause} onChange={(e) => setEditForm({...editForm, disability_cause: e.target.value})}

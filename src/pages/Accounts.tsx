@@ -306,6 +306,7 @@ const Accounts: React.FC = () => {
       case 'STAFF': return 'bg-blue-100 text-blue-600 border-blue-200';
       case 'ENCODER': return 'bg-purple-100 text-purple-600 border-purple-200';
       case 'PWD MEMBER': return 'bg-emerald-100 text-emerald-600 border-emerald-200';
+      case 'MAYOR': return 'bg-amber-100 text-amber-700 border-amber-200';
       default: return 'bg-slate-100 text-slate-600 border-slate-200';
     }
   };
@@ -690,6 +691,7 @@ const Accounts: React.FC = () => {
                     <option value="ADMIN">Administrator</option>
                     <option value="STAFF">Staff</option>
                     <option value="ENCODER">Encoder</option>
+                    <option value="MAYOR">Mayor</option>
                     <option value="USER">User</option>
                     <option value="PWD MEMBER">PWD Member</option>
                   </select>

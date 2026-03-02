@@ -353,7 +353,13 @@ const IdLayoutEditor: React.FC = () => {
     (async () => {
       try {
         const data = await templateApi.getActive();
-        if (data.front?.length) setFrontLayout(data.front.map(f => ({ ...f })));
+        if (data.front?.length) setFrontLayout(data.front.map(f => {
+          // Normalize photo item: ensure maxHeight is always present
+          if (f.id === 'photo' && (f.maxHeight === undefined || f.maxHeight === null)) {
+            return { ...f, maxHeight: 43.5 };
+          }
+          return { ...f };
+        }));
         if (data.back?.length) setBackLayout(data.back.map(b => ({ ...b })));
         if (data.front_image) setFrontImageUrl(data.front_image);
         if (data.back_image) setBackImageUrl(data.back_image);
