@@ -199,6 +199,8 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
       // If otherCause is specified but 'Other' is not already selected, auto-include it
       const disabilityTypeList = [...formData.disabilityType];
       const otherDisabilityType = disabilityTypes.find(dt => dt.name === 'Other');
+      
+      // If user provided a custom disability description, ensure "Other" type is included in the payload
       if (formData.otherCause.trim() && otherDisabilityType && !disabilityTypeList.includes('Other')) {
         disabilityTypeList.push('Other');
       }

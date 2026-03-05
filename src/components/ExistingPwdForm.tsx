@@ -727,10 +727,11 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
                 <select value={editForm.disability_type_id} onChange={(e) => setEditForm({...editForm, disability_type_id: parseInt(e.target.value)})}
                   className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none">
                   <option value={0}>Select Type...</option>
-                  {lookups?.disability_types.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  {lookups?.disability_types.filter(d => d.name !== 'Other').map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
                 </select>
               </div>
-              {lookups?.disability_types.find(d => d.id === editForm.disability_type_id)?.name === 'Other' && (
+              {/* Always show custom field for historical "Other" or new manual entries, but we want it to be filled if Other was previously selected */}
+              {(lookups?.disability_types.find(d => d.id === editForm.disability_type_id)?.name === 'Other' || editForm.disability_details) && (
                 <div>
                   <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Other Disability (Specify)</label>
                   <input 

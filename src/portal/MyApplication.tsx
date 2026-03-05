@@ -470,7 +470,15 @@ const MyApplication: React.FC<MyApplicationProps> = ({
       case 2: // Disability
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SelectField label="Type of Disability" value={formData.disabilityType} onChange={(v) => updateField('disabilityType', v)} options={disabilityTypes.map(dt => dt.name)} required={!formData.disabilityTypeSpecify.trim()} disabled={isFieldDisabled('disabilityType')} highlighted={isFieldHighlighted('disabilityType')} />
+            <SelectField 
+              label="Type of Disability" 
+              value={formData.disabilityType} 
+              onChange={(v) => updateField('disabilityType', v)} 
+              options={disabilityTypes.filter(dt => dt.name !== 'Other').map(dt => dt.name)} 
+              required={!formData.disabilityTypeSpecify.trim()} 
+              disabled={isFieldDisabled('disabilityType')} 
+              highlighted={isFieldHighlighted('disabilityType')} 
+            />
             <InputField
               label="Others (Specify)"
               value={formData.disabilityTypeSpecify}
