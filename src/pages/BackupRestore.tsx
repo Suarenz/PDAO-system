@@ -17,6 +17,9 @@ import { backupsApi, Backup } from '../api';
 import Modal, { useModal } from '../components/Modal';
 
 const BackupRestore: React.FC = () => {
+  const MAX_RESTORE_FILE_BYTES = 500 * 1024 * 1024;
+  const ALLOWED_RESTORE_EXTENSIONS = ['sql', 'txt', 'zip', 'gz'];
+
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [backups, setBackups] = useState<Backup[]>([]);
@@ -46,7 +49,27 @@ const BackupRestore: React.FC = () => {
     fetchBackups();
   }, []);
 
+  const validateRestoreFile = (file: File): string | null => {
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (!ALLOWED_RESTORE_EXTENSIONS.includes(extension)) {
+      return 'Invalid file type. Upload a .sql, .txt, .zip, or .gz backup file.';
+    }
+
+    if (file.size <= 0) {
+      return 'Selected backup file is empty.';
+    }
+
+    if (file.size > MAX_RESTORE_FILE_BYTES) {
+      return 'File is too large. Maximum allowed size is 500MB.';
+    }
+
+    return null;
+  };
+
   const handleBackupNow = async () => {
+    if (isRestoring) return;
+
     setIsBackingUp(true);
     try {
       await backupsApi.create("Manual backup created from dashboard");
@@ -62,8 +85,20 @@ const BackupRestore: React.FC = () => {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isRestoring) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const validationError = validateRestoreFile(file);
+    if (validationError) {
+      showAlert('Invalid Backup File', validationError, 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     const confirmed = await showConfirm(
       "Restore Database",
@@ -100,6 +135,8 @@ const BackupRestore: React.FC = () => {
   };
 
   const handleRestoreBackup = async (id: number) => {
+    if (isRestoring) return;
+
     const confirmed = await showConfirm(
       "Restore Backup",
       "Are you sure you want to restore this backup? This will overwrite all current data and cannot be undone!"
@@ -141,8 +178,8 @@ const BackupRestore: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-slate-200/20 p-8 md:p-12">
         
         {/* Header Section */}
-        <div className="flex items-start gap-6 mb-12">
-           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600 dark:text-blue-400">
+        <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 mb-8 sm:mb-12">
+           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600 dark:text-blue-400 shrink-0">
               <Database size={32} />
            </div>
            <div>
@@ -182,7 +219,7 @@ const BackupRestore: React.FC = () => {
 
              <button 
                 onClick={handleBackupNow}
-                disabled={isBackingUp}
+               disabled={isBackingUp || isRestoring}
                 className="w-full flex items-center justify-center gap-2 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:scale-100"
              >
                 {isBackingUp ? (
@@ -205,12 +242,16 @@ const BackupRestore: React.FC = () => {
                type="file" 
                ref={fileInputRef}
                onChange={handleFileUpload}
-               accept=".sql,.zip,.gz"
+               accept=".sql,.txt,.zip,.gz"
                className="hidden"
              />
              <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center p-6 group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+                onClick={() => {
+                  if (!isRestoring) {
+                    fileInputRef.current?.click();
+                  }
+                }}
+                className={`flex-1 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center p-6 group transition-colors ${isRestoring ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500'}`}
              >
                 {isRestoring ? (
                   <Loader2 size={32} className="text-blue-500 animate-spin mb-4" />
@@ -272,14 +313,16 @@ const BackupRestore: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => handleDownloadBackup(backup.id, backup.file_name)}
-                    className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                    disabled={isRestoring}
+                    className="p-2 text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Download"
                   >
                     <Download size={16} />
                   </button>
                   <button 
                     onClick={() => handleRestoreBackup(backup.id)}
-                    className="p-2 text-slate-400 hover:text-green-600 transition-colors"
+                    disabled={isRestoring}
+                    className="p-2 text-slate-400 hover:text-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Restore"
                   >
                     <RefreshCw size={16} />
@@ -290,31 +333,6 @@ const BackupRestore: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Cloud Backup destinations */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden shadow-sm p-8">
-          <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-6 uppercase tracking-widest">Cloud Backup Destinations</h4>
-          
-          <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-             <div className="flex items-center gap-4">
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-blue-600">
-                   <Cloud size={20} />
-                </div>
-                <div>
-                   <p className="text-sm font-bold text-slate-800 dark:text-white">Google Drive</p>
-                   <p className="text-xs text-slate-400 font-medium">Connected to hub-backup@gmail.com</p>
-                </div>
-             </div>
-             <div className="flex items-center gap-6">
-                <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-500 text-[10px] font-black rounded-lg uppercase tracking-widest border border-emerald-100 dark:border-emerald-900/30">
-                   Active
-                </span>
-                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                   <MoreHorizontal size={20} />
-                </button>
-             </div>
-          </div>
-      </div>
 
       {ModalComponent}
     </div>

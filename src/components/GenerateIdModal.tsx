@@ -33,6 +33,9 @@ interface LayoutItem {
   offsetY?: number;
 }
 
+const DEFAULT_FRONT_TEMPLATE = '/pdao-id-front.jpg';
+const DEFAULT_BACK_TEMPLATE = '/pdao-id-back.jpg';
+
 /* ============================================================================
    HELPERS
    ============================================================================ */
@@ -256,6 +259,7 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [activeTab, setActiveTab] = useState<'front' | 'back'>('front');
+  const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('landscape');
   const [frontImageUrl, setFrontImageUrl] = useState<string | null>(null);
   const [backImageUrl, setBackImageUrl] = useState<string | null>(null);
   
@@ -479,6 +483,10 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
 
   const handlePrint = () => {
     const origin = window.location.origin;
+    const frontCardImage = frontImageUrl || `${origin}${DEFAULT_FRONT_TEMPLATE}`;
+    const backCardImage = backImageUrl || `${origin}${DEFAULT_BACK_TEMPLATE}`;
+    const printDirection = 'row';
+    const firstCardSpacingRule = 'margin-right: 0 !important; margin-bottom: 0 !important;';
     
     // Create or get hidden iframe for "Same Page" print experience
     let iframe = document.getElementById('print-iframe') as HTMLIFrameElement;
@@ -499,19 +507,25 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
 <html>
 <head>
   <meta charset="utf-8">
-  <title>ID Print Preview</title>
+  <title></title>
   <style>
     * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; min-height: 100%; background: white; }
     @media print { 
-      @page { size: portrait; margin: 5mm; } 
-      body { margin: 0; padding: 0; background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      .card { margin: 0; break-inside: avoid; border: none !important; box-shadow: none !important; }
-      .card:first-child { margin-bottom: 15mm !important; }
-      .print-container { gap: 0 !important; padding: 0 !important; display: flex; flex-direction: column; align-items: center; }
+      @page { size: ${printOrientation}; margin: 0; }
+      html, body { margin: 0 !important; padding: 0 !important; width: 100%; min-height: 100%; background: white !important; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .print-sheet { width: 100%; min-height: 100vh; margin: 0 !important; padding: 0 !important; display: flex; align-items: flex-start; justify-content: flex-start; }
+      .card { margin: 0 !important; break-inside: avoid; page-break-inside: avoid; border: none !important; box-shadow: none !important; }
+      .card:first-child { ${firstCardSpacingRule} }
+      .print-container { gap: 0 !important; padding: 0 !important; margin: 0 !important; display: flex; flex-direction: ${printDirection}; align-items: flex-start !important; justify-content: flex-start !important; width: max-content; }
     }
-    body { background: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-    .print-container { display: flex; flex-direction: column; align-items: center; gap: 30px; }
-    .card { width: 85.6mm; height: 53.98mm; position: relative; background-size: cover; background-position: center; background-color: white; overflow: hidden; flex-shrink: 0; }
+    body { background: white; }
+    .print-sheet { width: 100%; min-height: 100vh; margin: 0; padding: 0; display: flex; align-items: flex-start; justify-content: flex-start; }
+    .print-container { display: flex; flex-direction: ${printDirection}; align-items: flex-start; justify-content: flex-start; gap: 0; margin: 0; padding: 0; width: max-content; }
+    .card:first-child { ${firstCardSpacingRule.replace(/ !important/g, '')} }
+    .card { width: 85.6mm; height: 53.98mm; position: relative; background-color: white; overflow: hidden; flex-shrink: 0; }
+    .card-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
     .field { position: absolute; white-space: nowrap; line-height: 1; font-weight: 700; pointer-events: none; }
     .field-header { font-family: Georgia, "Times New Roman", serif; }
     .field-normal { font-family: "Arial", sans-serif; }
@@ -520,29 +534,33 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
   </style>
 </head>
 <body>
-  <div class="print-container">
-    <div class="card" style="background-image: url('${frontImageUrl || `${origin}/pdao-id-front.jpg`}')">
-      ${frontLayout.map(item => {
-        if (item.id === 'photo') {
-          const z = item.zoom || 1;
-          const mmFactor = 0.1585;
-          const ox = ((item.offsetX || 0) * mmFactor) / z;
-          const oy = ((item.offsetY || 0) * mmFactor) / z;
-          return `<div class="photo" style="top:${item.top}%; left:${item.left}%; width:${item.width}%; height:${item.height}%;">${photo ? `<img src="${photo}" style="transform: scale(${z}) translate(${ox}mm, ${oy}mm); transform-origin: center; width: 100%; height: 100%; object-fit: cover;"/>` : ''}</div>`;
-        }
-        const isHeader = item.id === 'fullName' || item.id === 'disability';
-        const scaledSize = isHeader ? getAutoScaledSize(item.value, item.fontSize, 280) : item.fontSize;
-        const mmSize = (scaledSize * 0.1585).toFixed(3);
-        return `<div class="field ${isHeader ? 'field-header' : 'field-normal'}" style="top:${item.top}%; left:${item.left}%; font-size:${mmSize}mm; font-weight:${isHeader ? 800 : 700}; text-transform:${isHeader ? 'uppercase' : 'none'}; letter-spacing:${isHeader ? '0.05em' : 'normal'}; color:${item.id === 'bloodType' ? 'red' : 'black'}; ${isHeader ? 'transform: translateX(-50%); text-align: center;' : ''}">${item.value}</div>`;
-      }).join('')}
-    </div>
-    <div class="card" style="background-image: url('${backImageUrl || `${origin}/pdao-id-back.jpg`}')">
-      ${backLayout.map(item => {
-        const isHeader = item.id === 'fullName' || item.id === 'disability';
-        const scaledSize = isHeader ? getAutoScaledSize(item.value, item.fontSize, 280) : item.fontSize;
-        const mmSize = (scaledSize * 0.1585).toFixed(3);
-        return `<div class="field ${isHeader ? 'field-header' : 'field-normal'}" style="top:${item.top}%; left:${item.left}%; font-size:${mmSize}mm; font-weight:${isHeader ? 800 : 700}; text-transform:${isHeader ? 'uppercase' : 'none'}; letter-spacing:${isHeader ? '0.05em' : 'normal'}; color:${item.id === 'bloodType' ? 'red' : 'black'}; ${isHeader ? 'transform: translateX(-50%); text-align: center;' : ''}">${item.value}</div>`;
-      }).join('')}
+  <div class="print-sheet">
+    <div class="print-container">
+      <div class="card">
+        <img class="card-bg" src="${frontCardImage}" alt="Front ID template" />
+        ${frontLayout.map(item => {
+          if (item.id === 'photo') {
+            const z = item.zoom || 1;
+            const mmFactor = 0.1585;
+            const ox = ((item.offsetX || 0) * mmFactor) / z;
+            const oy = ((item.offsetY || 0) * mmFactor) / z;
+            return `<div class="photo" style="top:${item.top}%; left:${item.left}%; width:${item.width}%; height:${item.height}%;">${photo ? `<img src="${photo}" style="transform: scale(${z}) translate(${ox}mm, ${oy}mm); transform-origin: center; width: 100%; height: 100%; object-fit: cover;"/>` : ''}</div>`;
+          }
+          const isHeader = item.id === 'fullName' || item.id === 'disability';
+          const scaledSize = isHeader ? getAutoScaledSize(item.value, item.fontSize, 280) : item.fontSize;
+          const mmSize = (scaledSize * 0.1585).toFixed(3);
+          return `<div class="field ${isHeader ? 'field-header' : 'field-normal'}" style="top:${item.top}%; left:${item.left}%; font-size:${mmSize}mm; font-weight:${isHeader ? 800 : 700}; text-transform:${isHeader ? 'uppercase' : 'none'}; letter-spacing:${isHeader ? '0.05em' : 'normal'}; color:${item.id === 'bloodType' ? 'red' : 'black'}; ${isHeader ? 'transform: translateX(-50%); text-align: center;' : ''}">${item.value}</div>`;
+        }).join('')}
+      </div>
+      <div class="card">
+        <img class="card-bg" src="${backCardImage}" alt="Back ID template" />
+        ${backLayout.map(item => {
+          const isHeader = item.id === 'fullName' || item.id === 'disability';
+          const scaledSize = isHeader ? getAutoScaledSize(item.value, item.fontSize, 280) : item.fontSize;
+          const mmSize = (scaledSize * 0.1585).toFixed(3);
+          return `<div class="field ${isHeader ? 'field-header' : 'field-normal'}" style="top:${item.top}%; left:${item.left}%; font-size:${mmSize}mm; font-weight:${isHeader ? 800 : 700}; text-transform:${isHeader ? 'uppercase' : 'none'}; letter-spacing:${isHeader ? '0.05em' : 'normal'}; color:${item.id === 'bloodType' ? 'red' : 'black'}; ${isHeader ? 'transform: translateX(-50%); text-align: center;' : ''}">${item.value}</div>`;
+        }).join('')}
+      </div>
     </div>
   </div>
   <script>window.onload = () => { setTimeout(() => { window.focus(); window.print(); }, 500); };</script>
@@ -692,13 +710,15 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
                 style={{
                   width: '540px',
                   aspectRatio: '85.6 / 53.98',
-                  backgroundImage: `url('${activeTab === 'front' ? (frontImageUrl || '/pdao-id-front.jpg') : (backImageUrl || '/pdao-id-back.jpg')}')`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
                   transform: `scale(${scaleFactor})`,
                   transformOrigin: 'center center',
                 }}
               >
+                <img
+                  src={activeTab === 'front' ? (frontImageUrl || DEFAULT_FRONT_TEMPLATE) : (backImageUrl || DEFAULT_BACK_TEMPLATE)}
+                  alt={`PDAO ID ${activeTab}`}
+                  className="absolute inset-0 w-full h-full object-fill pointer-events-none"
+                />
                 {(activeTab === 'front' ? frontLayout : backLayout).map(item => (
                   <DraggableItem 
                     key={item.id} 
@@ -716,9 +736,30 @@ const GenerateIdModal: React.FC<GenerateIdModalProps> = ({
 
         {/* Footer */}
         <div className="px-10 py-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 flex items-center justify-between">
-          <p className="text-xs text-slate-500 font-medium italic">
-            Tip: Scroll over photo to zoom • Ctrl+Drag to move image inside
-          </p>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3">
+              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Print</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPrintOrientation('landscape')}
+                  className={`rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all ${printOrientation === 'landscape' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                >
+                  Landscape
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintOrientation('portrait')}
+                  className={`rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all ${printOrientation === 'portrait' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                >
+                  Portrait
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 font-medium italic">
+              Tip: Scroll over photo to zoom • Ctrl+Drag to move image inside
+            </p>
+          </div>
           <div className="flex gap-4">
             <button
                onClick={onClose}

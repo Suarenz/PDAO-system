@@ -8,6 +8,7 @@ use App\Models\Barangay;
 use App\Models\DisabilityType;
 use App\Models\GeneratedReport;
 use App\Models\PwdProfile;
+use App\Support\EncodingRepair;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -230,33 +231,162 @@ class ReportController extends Controller
         }
     }
 
+    protected function buildPrimaryDisabilitySubquery()
+    {
+        return DB::table('pwd_disabilities as pwd_disability_selection')
+            ->selectRaw('pwd_disability_selection.pwd_profile_id, COALESCE(MIN(CASE WHEN pwd_disability_selection.is_primary = 1 THEN pwd_disability_selection.id END), MIN(pwd_disability_selection.id)) as pwd_disability_id')
+            ->groupBy('pwd_disability_selection.pwd_profile_id');
+    }
+
+    protected function getDisabilityLabelSql(string $typeAlias, string $disabilityAlias): string
+    {
+        return "CASE WHEN {$typeAlias}.name = 'Other' AND {$disabilityAlias}.cause_details IS NOT NULL AND {$disabilityAlias}.cause_details != '' THEN {$disabilityAlias}.cause_details ELSE {$typeAlias}.name END";
+    }
+
+    protected function buildMasterlistTitle(array $filters): string
+    {
+        $titleParts = ['PWD Masterlist'];
+
+        if (isset($filters['barangay'])) {
+            $titleParts[] = '- Barangay ' . $filters['barangay'];
+        }
+
+        if (($filters['status'] ?? null) === 'DECEASED') {
+            $titleParts[] = '(Deceased)';
+        }
+
+        if (($filters['is_child'] ?? false) === true) {
+            $titleParts[] = '(Children)';
+        }
+
+        if (($filters['has_pwd_number'] ?? null) === true) {
+            $titleParts[] = '(With ID Number)';
+        }
+
+        if (($filters['has_pwd_number'] ?? null) === false) {
+            $titleParts[] = '(Without ID Number)';
+        }
+
+        return implode(' ', $titleParts);
+    }
+
+    protected function buildMasterlistQuery(array $filters)
+    {
+        $selectedDisability = $this->buildPrimaryDisabilitySubquery();
+        $disabilityLabelSql = $this->getDisabilityLabelSql('disability_type', 'primary_disability');
+
+        $query = DB::table('pwd_profiles')
+            ->leftJoin('pwd_personal_info', 'pwd_profiles.id', '=', 'pwd_personal_info.pwd_profile_id')
+            ->leftJoin('pwd_addresses', 'pwd_profiles.id', '=', 'pwd_addresses.pwd_profile_id')
+            ->leftJoin('barangays', 'pwd_addresses.barangay_id', '=', 'barangays.id')
+            ->leftJoinSub($selectedDisability, 'selected_disability', function ($join) {
+                $join->on('pwd_profiles.id', '=', 'selected_disability.pwd_profile_id');
+            })
+            ->leftJoin('pwd_disabilities as primary_disability', 'selected_disability.pwd_disability_id', '=', 'primary_disability.id')
+            ->leftJoin('disability_types as disability_type', 'primary_disability.disability_type_id', '=', 'disability_type.id')
+            ->whereNull('pwd_profiles.deleted_at');
+
+        if (isset($filters['status'])) {
+            $query->where('pwd_profiles.status', $filters['status']);
+        } else {
+            $query->where('pwd_profiles.status', 'ACTIVE');
+        }
+
+        if (isset($filters['barangay_id'])) {
+            $query->where('pwd_addresses.barangay_id', $filters['barangay_id']);
+        }
+
+        if (isset($filters['barangay'])) {
+            $query->where('barangays.name', $filters['barangay']);
+        }
+
+        if (isset($filters['disability_type_id'])) {
+            $query->where('primary_disability.disability_type_id', $filters['disability_type_id']);
+        }
+
+        if (isset($filters['has_pwd_number'])) {
+            if ($filters['has_pwd_number']) {
+                $query->whereNotNull('pwd_profiles.pwd_number')->where('pwd_profiles.pwd_number', '!=', '');
+            } else {
+                $query->where(function ($subQuery) {
+                    $subQuery->whereNull('pwd_profiles.pwd_number')->orWhere('pwd_profiles.pwd_number', '');
+                });
+            }
+        }
+
+        if (($filters['is_child'] ?? false) === true) {
+            $query->whereNotNull('pwd_personal_info.birth_date')
+                ->whereRaw('TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, CURDATE()) < 18');
+        }
+
+        return $query->select([
+            'pwd_profiles.id',
+            'pwd_profiles.pwd_number',
+            'pwd_profiles.first_name',
+            'pwd_profiles.middle_name',
+            'pwd_profiles.last_name',
+            'pwd_profiles.suffix',
+            'pwd_profiles.status',
+            'pwd_personal_info.sex',
+            'barangays.name as barangay',
+            DB::raw('TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, CURDATE()) as age'),
+            DB::raw("{$disabilityLabelSql} as disability_type"),
+        ]);
+    }
+
+    protected function formatMasterlistRow(object $pwd): array
+    {
+        $nameParts = array_filter([
+            EncodingRepair::repairName($pwd->first_name  ?? null),
+            EncodingRepair::repairName($pwd->middle_name ?? null),
+            EncodingRepair::repairName($pwd->last_name   ?? null),
+            EncodingRepair::repairName($pwd->suffix      ?? null),
+        ]);
+
+        return [
+            'pwd_number'      => $pwd->pwd_number,
+            'name'            => implode(' ', $nameParts),
+            'sex'             => $pwd->sex,
+            'age'             => $pwd->age,
+            'barangay'        => $pwd->barangay,
+            'disability_type' => $pwd->disability_type,
+            'status'          => $pwd->status,
+        ];
+    }
+
     protected function getStatisticalReportData(array $filters): array
     {
         $asOfDate = $filters['as_of_date'] ?? now()->format('Y-m-d');
+        $selectedDisability = $this->buildPrimaryDisabilitySubquery();
+        $disabilityLabelSql = $this->getDisabilityLabelSql('disability_types', 'primary_disability');
         
         $targetTypes = [
-            'Cancer (RA 11215)' => 'Cancer',
+            'Cancer (RA 11215)' => 'Cancer (RA 11215)',
             'Deaf or Hard of Hearing' => 'Deaf or Hard of Hearing',
-            'Intellectual Disability' => 'Intellectual',
-            'Learning Disability' => 'Learning',
-            'Mental Disability' => 'Mental',
-            'Physical Disability' => 'Physical',
-            'Psychosocial Disability' => 'Psychosocial',
-            'Rare Disease (RA 10747)' => 'Rare Disease',
-            'Speech & Language Impairment' => 'Speech/Language',
-            'Visual Disability' => 'Visual'
+            'Intellectual Disability' => 'Intellectual Disability',
+            'Learning Disability' => 'Learning Disability',
+            'Mental Disability' => 'Mental Disability',
+            'Physical Disability' => 'Physical Disability',
+            'Psychosocial Disability' => 'Psychosocial Disability',
+            'Rare Disease (RA 10747)' => 'Rare Disease (RA 10747)',
+            'Speech & Language Impairment' => 'Speech & Language Impairment',
+            'Visual Disability' => 'Visual Disability'
         ];
 
         // Optimized: Run one query grouped by disability type instead of looping
         $countsByDisability = DB::table('pwd_profiles')
             ->join('pwd_personal_info', 'pwd_profiles.id', '=', 'pwd_personal_info.pwd_profile_id')
-            ->join('pwd_disabilities', 'pwd_profiles.id', '=', 'pwd_disabilities.pwd_profile_id')
-            ->join('disability_types', 'pwd_disabilities.disability_type_id', '=', 'disability_types.id')
+            ->joinSub($selectedDisability, 'selected_disability', function ($join) {
+                $join->on('pwd_profiles.id', '=', 'selected_disability.pwd_profile_id');
+            })
+            ->join('pwd_disabilities as primary_disability', 'selected_disability.pwd_disability_id', '=', 'primary_disability.id')
+            ->join('disability_types', 'primary_disability.disability_type_id', '=', 'disability_types.id')
             ->where('pwd_profiles.status', 'ACTIVE')
             ->whereNull('pwd_profiles.deleted_at')
+            ->whereNotNull('pwd_personal_info.birth_date')
             ->where('pwd_profiles.date_applied', '<=', $asOfDate)
             ->select(
-                'disability_types.name as db_name',
+                DB::raw("{$disabilityLabelSql} as db_name"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(MONTH, pwd_personal_info.birth_date, '$asOfDate') >= 1 AND TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') < 18 AND pwd_personal_info.sex = 'Male' THEN 1 END) as g1_male"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(MONTH, pwd_personal_info.birth_date, '$asOfDate') >= 1 AND TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') < 18 AND pwd_personal_info.sex = 'Female' THEN 1 END) as g1_female"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') BETWEEN 18 AND 30 AND pwd_personal_info.sex = 'Male' THEN 1 END) as g2_male"),
@@ -266,7 +396,7 @@ class ReportController extends Controller
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') >= 60 AND pwd_personal_info.sex = 'Male' THEN 1 END) as g4_male"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') >= 60 AND pwd_personal_info.sex = 'Female' THEN 1 END) as g4_female")
             )
-            ->groupBy('disability_types.name')
+            ->groupBy('db_name')
             ->get()
             ->keyBy('db_name');
 
@@ -290,6 +420,13 @@ class ReportController extends Controller
             }
         }
 
+        // Add "Other" entries (user-specified disability types) as separate rows
+        foreach ($countsByDisability as $dbName => $counts) {
+            if (!isset($targetTypes[$dbName])) {
+                $results[] = array_merge(['no' => $index++, 'type' => $dbName], (array)$counts);
+            }
+        }
+
         return [
             'title' => 'TOTAL NUMBER OF REGISTERED PERSONS WITH DISABILITIES',
             'as_of' => $asOfDate,
@@ -303,38 +440,46 @@ class ReportController extends Controller
     {
         $asOfDate = $filters['as_of_date'] ?? now()->format('Y-m-d');
         $year = $filters['year'] ?? now()->year;
+        $selectedDisability = $this->buildPrimaryDisabilitySubquery();
+        $disabilityLabelSql = $this->getDisabilityLabelSql('disability_types', 'primary_disability');
 
         // Summary data grouped by disability type for the table view
         $summaryData = DB::table('pwd_profiles')
             ->join('pwd_personal_info', 'pwd_profiles.id', '=', 'pwd_personal_info.pwd_profile_id')
-            ->join('pwd_disabilities', 'pwd_profiles.id', '=', 'pwd_disabilities.pwd_profile_id')
-            ->join('disability_types', 'pwd_disabilities.disability_type_id', '=', 'disability_types.id')
+            ->joinSub($selectedDisability, 'selected_disability', function ($join) {
+                $join->on('pwd_profiles.id', '=', 'selected_disability.pwd_profile_id');
+            })
+            ->join('pwd_disabilities as primary_disability', 'selected_disability.pwd_disability_id', '=', 'primary_disability.id')
+            ->join('disability_types', 'primary_disability.disability_type_id', '=', 'disability_types.id')
             ->where('pwd_profiles.status', 'ACTIVE')
-            ->whereNotNull('pwd_profiles.pwd_number')
-            ->where('pwd_profiles.pwd_number', '!=', '')
             ->whereNull('pwd_profiles.deleted_at')
+            ->whereNotNull('pwd_personal_info.birth_date')
+            ->where('pwd_profiles.date_applied', '<=', $asOfDate)
             ->whereRaw("TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') <= 17")
             ->whereRaw("TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') >= 0")
             ->select(
-                'disability_types.name as disability_type',
+                DB::raw("{$disabilityLabelSql} as disability_type"),
                 DB::raw('SUM(CASE WHEN pwd_personal_info.sex = "Male" THEN 1 ELSE 0 END) as male'),
                 DB::raw('SUM(CASE WHEN pwd_personal_info.sex = "Female" THEN 1 ELSE 0 END) as female'),
                 DB::raw('COUNT(*) as total')
             )
-            ->groupBy('disability_types.id', 'disability_types.name')
+            ->groupBy('disability_type')
             ->get();
 
         // Detailed records for export
         $detailedData = DB::table('pwd_profiles')
             ->join('pwd_personal_info', 'pwd_profiles.id', '=', 'pwd_personal_info.pwd_profile_id')
-            ->join('pwd_disabilities', 'pwd_profiles.id', '=', 'pwd_disabilities.pwd_profile_id')
-            ->join('disability_types', 'pwd_disabilities.disability_type_id', '=', 'disability_types.id')
+            ->joinSub($selectedDisability, 'selected_disability', function ($join) {
+                $join->on('pwd_profiles.id', '=', 'selected_disability.pwd_profile_id');
+            })
+            ->join('pwd_disabilities as primary_disability', 'selected_disability.pwd_disability_id', '=', 'primary_disability.id')
+            ->join('disability_types', 'primary_disability.disability_type_id', '=', 'disability_types.id')
             ->leftJoin('pwd_addresses', 'pwd_profiles.id', '=', 'pwd_addresses.pwd_profile_id')
             ->leftJoin('barangays', 'pwd_addresses.barangay_id', '=', 'barangays.id')
             ->where('pwd_profiles.status', 'ACTIVE')
-            ->whereNotNull('pwd_profiles.pwd_number')
-            ->where('pwd_profiles.pwd_number', '!=', '')
             ->whereNull('pwd_profiles.deleted_at')
+            ->whereNotNull('pwd_personal_info.birth_date')
+            ->where('pwd_profiles.date_applied', '<=', $asOfDate)
             ->whereRaw("TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') <= 17")
             ->whereRaw("TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') >= 0")
             ->select(
@@ -344,11 +489,20 @@ class ReportController extends Controller
                 'pwd_profiles.middle_name',
                 'pwd_personal_info.sex as gender',
                 DB::raw("TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') as age"),
-                'disability_types.name as disability',
+                DB::raw("{$disabilityLabelSql} as disability"),
                 'barangays.name as barangay'
             )
             ->orderBy('pwd_profiles.last_name')
             ->get();
+
+        // Apply encoding repair to name fields so any remaining mojibake or
+        // question-mark corruption is cleaned up before reports / exports.
+        $detailedData = $detailedData->map(function ($row) {
+            $row->surname     = EncodingRepair::repairName($row->surname);
+            $row->name        = EncodingRepair::repairName($row->name);
+            $row->middle_name = EncodingRepair::repairName($row->middle_name);
+            return $row;
+        });
 
         return [
             'title' => "No. of children with disabilities issued with IDs (17 years old and below) $year",
@@ -363,15 +517,21 @@ class ReportController extends Controller
     protected function getDilgFormatData(array $filters): array
     {
         $asOfDate = $filters['as_of_date'] ?? now()->format('Y-m-d');
+        $selectedDisability = $this->buildPrimaryDisabilitySubquery();
+        $disabilityLabelSql = $this->getDisabilityLabelSql('disability_types', 'primary_disability');
 
         $data = DB::table('pwd_profiles')
             ->join('pwd_personal_info', 'pwd_profiles.id', '=', 'pwd_personal_info.pwd_profile_id')
-            ->join('pwd_disabilities', 'pwd_profiles.id', '=', 'pwd_disabilities.pwd_profile_id')
-            ->join('disability_types', 'pwd_disabilities.disability_type_id', '=', 'disability_types.id')
+            ->joinSub($selectedDisability, 'selected_disability', function ($join) {
+                $join->on('pwd_profiles.id', '=', 'selected_disability.pwd_profile_id');
+            })
+            ->join('pwd_disabilities as primary_disability', 'selected_disability.pwd_disability_id', '=', 'primary_disability.id')
+            ->join('disability_types', 'primary_disability.disability_type_id', '=', 'disability_types.id')
             ->where('pwd_profiles.status', 'ACTIVE')
             ->whereNull('pwd_profiles.deleted_at')
+            ->whereNotNull('pwd_personal_info.birth_date')
             ->select(
-                'disability_types.name as disability_type',
+                DB::raw("{$disabilityLabelSql} as disability_type"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') < 18 THEN 1 END) as age_pediatric"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') BETWEEN 18 AND 59 THEN 1 END) as age_adult"),
                 DB::raw("COUNT(CASE WHEN TIMESTAMPDIFF(YEAR, pwd_personal_info.birth_date, '$asOfDate') >= 60 THEN 1 END) as age_senior"),
@@ -379,8 +539,8 @@ class ReportController extends Controller
                 DB::raw('SUM(CASE WHEN pwd_personal_info.sex = "Female" THEN 1 ELSE 0 END) as female'),
                 DB::raw('COUNT(*) as total')
             )
-            ->groupBy('disability_types.id', 'disability_types.name')
-            ->orderBy('disability_types.name')
+            ->groupBy('disability_type')
+            ->orderBy('disability_type')
             ->get();
 
         $grandTotal = $data->sum('total');
@@ -437,29 +597,60 @@ class ReportController extends Controller
         $year = $filters['year'] ?? now()->year;
         $startDate = "$year-01-01";
         $endDate = "$year-12-31";
+        $approvedEventDateSql = 'DATE(COALESCE(pending_registrations.reviewed_at, pwd_profiles.date_approved, pwd_profiles.date_applied, pwd_profiles.created_at))';
+        $approvedEventMonthSql = 'MONTH(COALESCE(pending_registrations.reviewed_at, pwd_profiles.date_approved, pwd_profiles.date_applied, pwd_profiles.created_at))';
+        $directEventDateSql = 'DATE(COALESCE(pwd_profiles.date_approved, pwd_profiles.date_applied, pwd_profiles.created_at))';
+        $directEventMonthSql = 'MONTH(COALESCE(pwd_profiles.date_approved, pwd_profiles.date_applied, pwd_profiles.created_at))';
 
-        // Optimized: Single query for the whole year daily data
-        $dailyData = DB::table('pwd_profiles')
-            ->leftJoin('pending_registrations', 'pwd_profiles.id', '=', 'pending_registrations.pwd_profile_id')
+        $approvedEvents = DB::table('pending_registrations')
+            ->join('pwd_profiles', 'pending_registrations.pwd_profile_id', '=', 'pwd_profiles.id')
             ->where('pwd_profiles.status', 'ACTIVE')
             ->whereNull('pwd_profiles.deleted_at')
-            ->whereBetween('pwd_profiles.date_applied', [$startDate, $endDate])
+            ->whereNull('pending_registrations.deleted_at')
+            ->where('pending_registrations.status', 'APPROVED')
+            ->whereBetween(DB::raw($approvedEventDateSql), [$startDate, $endDate])
             ->select(
-                'pwd_profiles.date_applied as date',
-                DB::raw('MONTH(pwd_profiles.date_applied) as month_num'),
-                DB::raw('SUM(CASE WHEN pending_registrations.submission_type = "NEW" OR pending_registrations.submission_type IS NULL THEN 1 ELSE 0 END) as new_count'),
-                DB::raw('SUM(CASE WHEN pending_registrations.submission_type = "RENEWAL" THEN 1 ELSE 0 END) as renewal_count'),
-                DB::raw('SUM(CASE WHEN pending_registrations.submission_type = "EXISTING" THEN 1 ELSE 0 END) as transfer_count'),
+                DB::raw("{$approvedEventDateSql} as event_date"),
+                DB::raw("{$approvedEventMonthSql} as month_num"),
+                'pending_registrations.submission_type'
+            );
+
+        $directEvents = DB::table('pwd_profiles')
+            ->where('pwd_profiles.status', 'ACTIVE')
+            ->whereNull('pwd_profiles.deleted_at')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('pending_registrations')
+                    ->whereColumn('pending_registrations.pwd_profile_id', 'pwd_profiles.id')
+                    ->whereNull('pending_registrations.deleted_at')
+                    ->where('pending_registrations.status', 'APPROVED');
+            })
+            ->whereBetween(DB::raw($directEventDateSql), [$startDate, $endDate])
+            ->select(
+                DB::raw("{$directEventDateSql} as event_date"),
+                DB::raw("{$directEventMonthSql} as month_num"),
+                DB::raw("'NEW' as submission_type")
+            );
+
+        $dailyData = DB::query()
+            ->fromSub($approvedEvents->unionAll($directEvents), 'registration_events')
+            ->select(
+                'registration_events.event_date as date',
+                'registration_events.month_num',
+                DB::raw('SUM(CASE WHEN registration_events.submission_type = "NEW" THEN 1 ELSE 0 END) as new_count'),
+                DB::raw('SUM(CASE WHEN registration_events.submission_type = "RENEWAL" THEN 1 ELSE 0 END) as renewal_count'),
+                DB::raw('SUM(CASE WHEN registration_events.submission_type = "EXISTING" THEN 1 ELSE 0 END) as transfer_count'),
                 DB::raw('COUNT(*) as total')
             )
-            ->groupBy('pwd_profiles.date_applied', DB::raw('MONTH(pwd_profiles.date_applied)'))
-            ->orderBy('pwd_profiles.date_applied')
+            ->groupBy('registration_events.event_date', 'registration_events.month_num')
+            ->orderBy('registration_events.event_date')
             ->get()
             ->groupBy('month_num');
 
         // Optimized: Single query for inactive records for the whole year
         $lostData = DB::table('pwd_profiles')
             ->where('pwd_profiles.status', 'INACTIVE')
+            ->whereNull('pwd_profiles.deleted_at')
             ->whereBetween('pwd_profiles.updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
             ->select(
                 DB::raw('DATE(pwd_profiles.updated_at) as date'),
@@ -552,72 +743,17 @@ class ReportController extends Controller
 
     protected function getMasterlistData(array $filters): array
     {
-        $query = PwdProfile::with([
-            'personalInfo',
-            'address.barangay',
-            'disabilities.disabilityType',
-        ]);
+        $query = $this->buildMasterlistQuery($filters)
+            ->orderBy('pwd_profiles.last_name')
+            ->orderBy('pwd_profiles.first_name')
+            ->orderBy('pwd_profiles.id');
 
-        // Filter by status if provided, otherwise show all active
-        if (isset($filters['status'])) {
-            $query->where('status', $filters['status']);
-        } else {
-            $query->where('status', 'ACTIVE');
-        }
-
-        if (isset($filters['barangay_id'])) {
-            $query->whereHas('address', fn($q) => $q->where('barangay_id', $filters['barangay_id']));
-        }
-
-        // Support filtering by barangay name (from frontend dropdown)
-        if (isset($filters['barangay'])) {
-            $query->whereHas('address.barangay', fn($q) => $q->where('name', $filters['barangay']));
-        }
-
-        if (isset($filters['disability_type_id'])) {
-            $query->whereHas('disabilities', fn($q) => $q->where('disability_type_id', $filters['disability_type_id']));
-        }
-
-        // Support tab-specific filters from the masterlist UI
-        if (isset($filters['has_pwd_number'])) {
-            if ($filters['has_pwd_number']) {
-                $query->whereNotNull('pwd_number')->where('pwd_number', '!=', '');
-            } else {
-                $query->where(function ($q) {
-                    $q->whereNull('pwd_number')->orWhere('pwd_number', '');
-                });
-            }
-        }
-
-        if (isset($filters['is_child']) && $filters['is_child']) {
-            $query->whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) < 18');
-        }
-
-        $pwds = $query->orderBy('last_name')->get();
-
-        // Build dynamic title based on filters
-        $titleParts = ['PWD Masterlist'];
-        if (isset($filters['barangay'])) {
-            $titleParts[] = '- Barangay ' . $filters['barangay'];
-        }
-        if (isset($filters['status']) && $filters['status'] === 'DECEASED') {
-            $titleParts[] = '(Deceased)';
-        }
-
-        $rows = $pwds->map(function ($pwd) {
-            return [
-                'pwd_number' => $pwd->pwd_number,
-                'name' => $pwd->full_name,
-                'sex' => $pwd->personalInfo?->sex,
-                'age' => $pwd->age,
-                'barangay' => $pwd->address?->barangay?->name,
-                'disability_type' => $pwd->disabilities->first()?->disabilityType?->name,
-                'status' => $pwd->status,
-            ];
+        $rows = $query->get()->map(function ($pwd) {
+            return $this->formatMasterlistRow($pwd);
         });
 
         return [
-            'title' => implode(' ', $titleParts),
+            'title' => $this->buildMasterlistTitle($filters),
             'generated_at' => now()->toDateTimeString(),
             'total_count' => $rows->count(),
             'rows' => $rows->toArray(),
@@ -635,6 +771,7 @@ class ReportController extends Controller
     {
         $fullPath = Storage::disk('reports')->path($filePath);
         $fp = fopen($fullPath, 'w');
+        fwrite($fp, "\xEF\xBB\xBF"); // UTF-8 BOM for Windows Excel compatibility
         
         fputcsv($fp, [$data['title']]);
         fputcsv($fp, ['Generated: ' . $data['generated_at']]);
@@ -644,6 +781,17 @@ class ReportController extends Controller
             $headers = array_keys((array) $data['rows'][0]);
             fputcsv($fp, $headers);
             foreach ($data['rows'] as $row) {
+                fputcsv($fp, (array) $row);
+            }
+        }
+
+        // Include detailed individual records when present (e.g. YOUTH_PWD detailed list)
+        if (!empty($data['detailed_rows'])) {
+            fputcsv($fp, []); // blank separator row
+            fputcsv($fp, ['--- Individual Records ---']);
+            $detailHeaders = array_keys((array) $data['detailed_rows'][0]);
+            fputcsv($fp, $detailHeaders);
+            foreach ($data['detailed_rows'] as $row) {
                 fputcsv($fp, (array) $row);
             }
         }
@@ -1311,20 +1459,20 @@ class ReportController extends Controller
         $fullPath = Storage::disk('reports')->path($filePath);
 
         try {
+            if ($reportType === 'MASTERLIST') {
+                @ini_set('memory_limit', '1024M');
+            }
+
             $html = $this->buildPdfHtml($data, $reportType);
             $pdf = Pdf::loadHTML($html);
-            $pdf->setPaper('A4', 'landscape');
-            $pdf->save($fullPath);
-        } catch (\Exception $e) {
-            // Fallback to simple text if DomPDF fails
-            $content = $data['title'] . "\n";
-            $content .= "Generated: " . $data['generated_at'] . "\n\n";
-            if (!empty($data['rows'])) {
-                foreach ($data['rows'] as $row) {
-                    $content .= implode(' | ', (array) $row) . "\n";
-                }
+            if ($reportType === 'MASTERLIST') {
+                $pdf->setPaper('legal', 'landscape');
+            } else {
+                $pdf->setPaper('A4', 'landscape');
             }
-            file_put_contents($fullPath, $content);
+            $pdf->save($fullPath);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('Unable to generate PDF export. ' . $e->getMessage(), 0, $e);
         }
     }
 
@@ -1345,8 +1493,8 @@ class ReportController extends Controller
         }
 
         // Generic table
-        $html = '<html><head><style>
-            body { font-family: Arial, sans-serif; font-size: 10px; }
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; }
             th, td { border: 1px solid #333; padding: 6px; text-align: center; }
             th { background-color: #B91C1C; color: white; }
@@ -1380,279 +1528,99 @@ class ReportController extends Controller
     {
         $title = $data['title'] ?? 'PWD Masterlist';
         $generatedAt = $data['generated_at'] ?? now()->toDateTimeString();
-        $totalCount = $data['total_count'] ?? count($data['rows'] ?? []);
+        $rows = array_values($data['rows'] ?? []);
+        $totalCount = $data['total_count'] ?? count($rows);
         $formattedDate = date('F d, Y \a\t h:i A', strtotime($generatedAt));
-        $totalPages = max(1, ceil($totalCount / 30)); // approximate for footer reference
+        $rowsPerPage = 70;
+        $pages = array_chunk($rows, $rowsPerPage);
 
-        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-            /* ── Page & Body ── */
-            @page {
-                margin: 20mm 19mm 22mm 19mm; /* generous margins for hole-punching */
-            }
-            body {
-                font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-                font-size: 9px;
-                color: #1e293b;
-                margin: 0;
-                padding: 0;
-                line-height: 1.4;
-            }
-
-            /* ── Header / Branding ── */
-            .header-block {
-                text-align: center;
-                padding-bottom: 10px;
-                margin-bottom: 12px;
-                border-bottom: 3px solid #1B3A5C;
-            }
-            .header-block .office-name {
-                font-size: 14px;
-                font-weight: bold;
-                color: #1B3A5C;
-                letter-spacing: 1.5px;
-                text-transform: uppercase;
-                margin: 0 0 2px 0;
-            }
-            .header-block .municipality {
-                font-size: 12px;
-                font-weight: bold;
-                color: #334155;
-                text-transform: uppercase;
-                letter-spacing: 0.8px;
-                margin: 0 0 1px 0;
-            }
-            .header-block .province {
-                font-size: 10px;
-                color: #64748b;
-                font-style: italic;
-                margin: 0;
-            }
-
-            /* ── Report title bar ── */
-            .report-title-bar {
-                background-color: #1B3A5C;
-                color: #ffffff;
-                text-align: center;
-                padding: 7px 0;
-                margin-bottom: 6px;
-                font-size: 11px;
-                font-weight: bold;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-            }
-
-            /* ── Meta row ── */
-            .meta-table {
-                width: 100%;
-                border: none;
-                margin-bottom: 8px;
-                border-collapse: collapse;
-            }
-            .meta-table td {
-                border: none;
-                padding: 2px 0;
-                font-size: 8.5px;
-                color: #475569;
-            }
-
-            /* ── Data Table ── */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            .data-table thead th {
-                background-color: #2d4a6f;
-                color: #ffffff;
-                font-weight: bold;
-                font-size: 7.5px;
-                text-transform: uppercase;
-                letter-spacing: 0.6px;
-                padding: 8px 5px;
-                text-align: left;
-                border: 1px solid #1B3A5C;
-            }
-            .data-table thead th.center {
-                text-align: center;
-            }
-
-            /* Data cells */
-            .data-table tbody td {
-                padding: 6px 5px;
-                font-size: 8.5px;
-                color: #1e293b;
-                border-left: 1px solid #e2e8f0;
-                border-right: 1px solid #e2e8f0;
-                border-bottom: 1px solid #e2e8f0;
-            }
-            .data-table tbody td.center {
-                text-align: center;
-            }
-            .data-table tbody td.name-cell {
-                font-weight: 600;
-            }
-
-            /* Zebra striping — slightly more visible */
-            .row-even td { background-color: #f0f4fa; }
-            .row-odd td  { background-color: #ffffff; }
-
-            /* ── Status badges ── */
-            .badge {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 10px;
-                font-size: 7px;
-                font-weight: bold;
-                letter-spacing: 0.5px;
-                text-transform: uppercase;
-            }
-            .badge-active {
-                background-color: #dcfce7;
-                color: #15803d;
-                border: 1px solid #bbf7d0;
-            }
-            .badge-deceased {
-                background-color: #fef2f2;
-                color: #991b1b;
-                border: 1px solid #fecaca;
-            }
-            .badge-inactive {
-                background-color: #f1f5f9;
-                color: #64748b;
-                border: 1px solid #e2e8f0;
-            }
-
-            /* ── Missing data ── */
-            .na-text {
-                color: #94a3b8;
-                font-style: italic;
-                font-size: 8px;
-            }
-
-            /* ── Summary footer row ── */
-            .summary-row td {
-                background-color: #1B3A5C !important;
-                color: #ffffff;
-                font-weight: bold;
-                font-size: 8.5px;
-                padding: 7px 5px;
-                border: 1px solid #1B3A5C;
-            }
-
-            /* ── Document footer ── */
-            .doc-footer {
-                margin-top: 16px;
-                padding-top: 8px;
-                border-top: 1px solid #e2e8f0;
-                font-size: 7.5px;
-                color: #94a3b8;
-            }
-            .doc-footer table {
-                width: 100%;
-                border: none;
-                border-collapse: collapse;
-            }
-            .doc-footer table td {
-                border: none;
-                padding: 1px 0;
-                vertical-align: bottom;
-            }
-        </style></head><body>';
-
-        // ── Header / Branding ──
-        $html .= '<div class="header-block">';
-        $html .= '<p class="office-name">Person with Disability Affairs Office</p>';
-        $html .= '<p class="municipality">Municipality of Pagsanjan</p>';
-        $html .= '<p class="province">Province of Laguna</p>';
-        $html .= '</div>';
-
-        // ── Report title bar ──
-        $html .= '<div class="report-title-bar">' . e(strtoupper($title)) . '</div>';
-
-        // ── Meta info row ──
-        $html .= '<table class="meta-table"><tr>';
-        $html .= '<td style="text-align:left">Total Records: <strong>' . $totalCount . '</strong></td>';
-        $html .= '<td style="text-align:right">Date Generated: <strong>' . $formattedDate . '</strong></td>';
-        $html .= '</tr></table>';
-
-        if (!empty($data['rows'])) {
-            // ── Data table ──
-            $html .= '<table class="data-table"><thead><tr>';
-            $html .= '<th class="center" style="width:4%">#</th>';
-            $html .= '<th style="width:14%">PWD Number</th>';
-            $html .= '<th style="width:22%">Full Name</th>';
-            $html .= '<th class="center" style="width:5%">Sex</th>';
-            $html .= '<th class="center" style="width:5%">Age</th>';
-            $html .= '<th style="width:14%">Barangay</th>';
-            $html .= '<th style="width:18%">Disability Type</th>';
-            $html .= '<th class="center" style="width:9%">Status</th>';
-            $html .= '</tr></thead><tbody>';
-
-            foreach ($data['rows'] as $index => $row) {
-                $row = (array) $row;
-                $num = $index + 1;
-                $rowClass = ($index % 2 === 0) ? 'row-even' : 'row-odd';
-
-                // Handle missing data with "N/A" instead of blanks
-                $pwdNumber = !empty($row['pwd_number'])
-                    ? e($row['pwd_number'])
-                    : '<span class="na-text">N/A</span>';
-                $name = !empty($row['name']) ? e($row['name']) : '<span class="na-text">N/A</span>';
-                $sex = !empty($row['sex']) ? e($row['sex']) : '<span class="na-text">N/A</span>';
-                $age = (isset($row['age']) && $row['age'] !== '' && $row['age'] !== null)
-                    ? e($row['age'])
-                    : '<span class="na-text">N/A</span>';
-                $barangay = !empty($row['barangay']) ? e($row['barangay']) : '<span class="na-text">N/A</span>';
-                $disability = !empty($row['disability_type']) ? e($row['disability_type']) : '<span class="na-text">N/A</span>';
-
-                $status = strtoupper($row['status'] ?? '');
-                if ($status === 'ACTIVE') {
-                    $statusHtml = '<span class="badge badge-active">Active</span>';
-                } elseif ($status === 'DECEASED') {
-                    $statusHtml = '<span class="badge badge-deceased">Deceased</span>';
-                } elseif ($status !== '') {
-                    $statusHtml = '<span class="badge badge-inactive">' . e($status) . '</span>';
-                } else {
-                    $statusHtml = '<span class="na-text">N/A</span>';
-                }
-
-                $html .= '<tr class="' . $rowClass . '">';
-                $html .= '<td class="center">' . $num . '</td>';
-                $html .= '<td>' . $pwdNumber . '</td>';
-                $html .= '<td class="name-cell">' . $name . '</td>';
-                $html .= '<td class="center">' . $sex . '</td>';
-                $html .= '<td class="center">' . $age . '</td>';
-                $html .= '<td>' . $barangay . '</td>';
-                $html .= '<td>' . $disability . '</td>';
-                $html .= '<td class="center">' . $statusHtml . '</td>';
-                $html .= '</tr>';
-            }
-
-            // ── Summary footer row ──
-            $html .= '<tr class="summary-row">';
-            $html .= '<td class="center" colspan="2">TOTAL RECORDS</td>';
-            $html .= '<td colspan="6" style="text-align:left">' . $totalCount . ' registered person(s) with disability</td>';
-            $html .= '</tr>';
-
-            $html .= '</tbody></table>';
-        } else {
-            $html .= '<p style="text-align:center; color:#94a3b8; padding:30px; font-size:10px;">No records found matching the specified criteria.</p>';
+        if (empty($pages)) {
+            $pages = [[]];
         }
 
-        // ── Document footer ──
-        $html .= '<div class="doc-footer"><table><tr>';
-        $html .= '<td style="text-align:left">This is a system-generated document from the PDAO Management System. &mdash; Not valid without official seal.</td>';
-        $html .= '<td style="text-align:right">Page 1</td>';
-        $html .= '</tr></table></div>';
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            @page { margin: 12mm 10mm 14mm 10mm; }
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8px; color: #0f172a; margin: 0; }
+            .page { width: 100%; }
+            .page-break { page-break-after: always; }
+            .header { text-align: center; margin-bottom: 8px; }
+            .header h1, .header h2, .header p { margin: 0; }
+            .header h1 { font-size: 13px; }
+            .header h2 { font-size: 11px; margin-top: 2px; }
+            .header p { font-size: 8px; margin-top: 2px; }
+            .meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+            .meta td { border: none; padding: 0; font-size: 8px; }
+            table.report { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            table.report th, table.report td { border: 1px solid #334155; padding: 4px; vertical-align: top; word-wrap: break-word; }
+            table.report th { background: #dbeafe; font-size: 7.5px; text-transform: uppercase; }
+            .center { text-align: center; }
+            .footer { margin-top: 6px; font-size: 7px; text-align: right; color: #475569; }
+            .summary { font-weight: bold; background: #e2e8f0; }
+            .empty { padding: 16px 0; text-align: center; color: #64748b; }
+        </style></head><body>';
+
+        foreach ($pages as $pageIndex => $pageRows) {
+            $html .= '<div class="page' . ($pageIndex < count($pages) - 1 ? ' page-break' : '') . '">';
+            $html .= '<div class="header">';
+            $html .= '<h1>Person with Disability Affairs Office</h1>';
+            $html .= '<h2>Municipality of Pagsanjan, Laguna</h2>';
+            $html .= '<p>' . e($title) . '</p>';
+            $html .= '</div>';
+            $html .= '<table class="meta"><tr>';
+            $html .= '<td>Total Records: <strong>' . $totalCount . '</strong></td>';
+            $html .= '<td style="text-align:right">Generated: <strong>' . e($formattedDate) . '</strong></td>';
+            $html .= '</tr></table>';
+
+            if (!empty($pageRows)) {
+                $html .= '<table class="report"><thead><tr>';
+                $html .= '<th class="center" style="width:4%">#</th>';
+                $html .= '<th style="width:14%">PWD Number</th>';
+                $html .= '<th style="width:24%">Full Name</th>';
+                $html .= '<th class="center" style="width:6%">Sex</th>';
+                $html .= '<th class="center" style="width:6%">Age</th>';
+                $html .= '<th style="width:15%">Barangay</th>';
+                $html .= '<th style="width:20%">Disability Type</th>';
+                $html .= '<th class="center" style="width:11%">Status</th>';
+                $html .= '</tr></thead><tbody>';
+
+                foreach ($pageRows as $rowOffset => $row) {
+                    $row = (array) $row;
+                    $rowNumber = ($pageIndex * $rowsPerPage) + $rowOffset + 1;
+                    $html .= '<tr>';
+                    $html .= '<td class="center">' . $rowNumber . '</td>';
+                    $html .= '<td>' . e($row['pwd_number'] ?: 'N/A') . '</td>';
+                    $html .= '<td>' . e($row['name'] ?: 'N/A') . '</td>';
+                    $html .= '<td class="center">' . e($row['sex'] ?: 'N/A') . '</td>';
+                    $html .= '<td class="center">' . e($row['age'] ?? 'N/A') . '</td>';
+                    $html .= '<td>' . e($row['barangay'] ?: 'N/A') . '</td>';
+                    $html .= '<td>' . e($row['disability_type'] ?: 'N/A') . '</td>';
+                    $html .= '<td class="center">' . e($row['status'] ?: 'N/A') . '</td>';
+                    $html .= '</tr>';
+                }
+
+                if ($pageIndex === count($pages) - 1) {
+                    $html .= '<tr class="summary"><td colspan="8">Total Records: ' . $totalCount . '</td></tr>';
+                }
+
+                $html .= '</tbody></table>';
+            } else {
+                $html .= '<div class="empty">No records found matching the selected filters.</div>';
+            }
+
+            $html .= '<div class="footer">Page ' . ($pageIndex + 1) . ' of ' . count($pages) . '</div>';
+            $html .= '</div>';
+        }
 
         $html .= '</body></html>';
+
         return $html;
     }
 
     protected function buildStatisticalPdfHtml(array $data, string $formattedDate): string
     {
         $municipality = $data['municipality'] ?? 'NAME OF LGU';
-        $html = '<html><head><style>
-            body { font-family: Arial, sans-serif; font-size: 9px; }
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 9px; }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; }
             th, td { border: 1px solid #fff; padding: 5px; text-align: center; }
             .header { background-color: #B91C1C; color: white; font-weight: bold; }
@@ -1700,8 +1668,8 @@ class ReportController extends Controller
     protected function buildYouthPwdPdfHtml(array $data): string
     {
         $year = $data['year'] ?? now()->year;
-        $html = '<html><head><style>
-            body { font-family: Arial, sans-serif; font-size: 9px; }
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 9px; }
             .container { display: flex; flex-direction: row; align-items: flex-start; }
             .main-table { width: 70%; border-collapse: collapse; margin-top: 10px; float: left; }
             .summary-table { width: 25%; border-collapse: collapse; margin-top: 10px; float: right; }
@@ -1722,9 +1690,11 @@ class ReportController extends Controller
         foreach ($detailedRows as $r) {
             $r = (array)$r;
             $html .= '<tr>';
-            $html .= "<td>{$r['id_number']}</td><td>{$r['surname']}</td><td>{$r['name']}</td>";
-            $html .= "<td>" . ($r['middle_name'] ?: '—') . "</td><td>" . ($r['gender'] ?: '—') . "</td><td>{$r['age']}</td>";
-            $html .= "<td>{$r['disability']}</td><td>{$r['barangay']}</td>";
+            $html .= '<td>' . e($r['id_number']) . '</td><td>' . e($r['surname']) . '</td><td>' . e($r['name']) . '</td>';
+            $html .= '<td>' . (($r['middle_name'] ?? '') !== '' ? e($r['middle_name']) : '—') . '</td>';
+            $html .= '<td>' . (($r['gender']      ?? '') !== '' ? e($r['gender'])      : '—') . '</td>';
+            $html .= '<td>' . $r['age'] . '</td>';
+            $html .= '<td>' . e($r['disability']) . '</td><td>' . e($r['barangay'] ?? '') . '</td>';
             $html .= '</tr>';
         }
         $html .= '</tbody></table>';
@@ -1753,8 +1723,8 @@ class ReportController extends Controller
         $asOf = $data['as_of'] ?? now()->format('Y-m-d');
         $formattedDate = date('F d, Y', strtotime($asOf));
         
-        $html = '<html><head><style>
-            body { font-family: Arial, sans-serif; font-size: 10px; color: #1e293b; }
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; color: #1e293b; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #e2e8f0; padding: 8px; }
             th { background-color: #1e293b; color: white; font-weight: bold; text-transform: uppercase; font-size: 8px; text-align: center; }

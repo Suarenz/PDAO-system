@@ -228,7 +228,7 @@ const Dashboard: React.FC = () => {
         if (filters.year !== 'All Years') params.year = filters.year;
         if (filters.disabilityType !== 'All Types') params.disability_type = filters.disabilityType;
 
-        const [statsRes, byGender, byAge, byBarangay, byDisability, byEmployment, byIncome, byLivingArrangement, deceasedAgeRes] = await Promise.all([
+        const results = await Promise.allSettled([
           dashboardApi.getStats(params),
           dashboardApi.getByGender(params),
           dashboardApi.getByAgeGroup(params),
@@ -239,6 +239,17 @@ const Dashboard: React.FC = () => {
           dashboardApi.getByLivingArrangement(params),
           dashboardApi.getDeceasedByAge(params)
         ]);
+
+        const getValue = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' ? r.value : null;
+        const statsRes = getValue(results[0]) || {};
+        const byGender = getValue(results[1]) || [];
+        const byAge = getValue(results[2]) || [];
+        const byBarangay = getValue(results[3]) || [];
+        const byDisability = getValue(results[4]) || [];
+        const byEmployment = getValue(results[5]) || [];
+        const byIncome = getValue(results[6]) || [];
+        const byLivingArrangement = getValue(results[7]) || [];
+        const deceasedAgeRes = getValue(results[8]) || [];
 
         // Employment data (compute employed count for KPI)
         const empData = byEmployment.map((e: any) => ({
@@ -277,10 +288,12 @@ const Dashboard: React.FC = () => {
         }
 
         // Barangay
-        setBarangayData(byBarangay.map((b: any) => ({
-          name: b.name || b.barangay,
-          count: b.count || b.value || 0
-        })));
+        setBarangayData(byBarangay
+          .filter((b: any) => (b.name || b.barangay) !== 'Barangay III')
+          .map((b: any) => ({
+            name: b.name || b.barangay,
+            count: b.count || b.value || 0
+          })));
 
         // Disability — sorted descending, filter out zeros
         setDisabilityData(
@@ -593,16 +606,18 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ═══════ ROW 4: Deceased Age Distribution ═══════ */}
-      <ChartContainer title="Deceased PWD by Age Group (Current Year)" subtitle="Distribution of deceased persons with disability" height={300} isLoading={isLoading}>
-        {!hasData(deceasedAgeData) ? <EmptyState /> : (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={deceasedAgeData} margin={{ top: 25, right: 30, left: 15, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.08} vertical={false} />
-              <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={false} />
-              <YAxis allowDecimals={false} tick={axisTick} tickLine={false} axisLine={false} label={{ value: 'No. of Deceased', angle: -90, position: 'insideLeft', offset: 0, style: axisLabelStyle }} />
-              <Tooltip cursor={{ fill: 'rgba(244, 63, 94, 0.05)' }} content={<CustomTooltip />} />
-              <Bar dataKey="value" fill={COLORS.negative} radius={[6, 6, 0, 0]} barSize={50} label={renderBarLabel} />
+      {/* ═══════ ROW 4: PWD Distribution by Barangay ═══════ */}
+      <ChartContainer title="PWD Distribution by Barangay" subtitle="Number of registered persons with disability per barangay" height={Math.max(350, barangayData.length * 32 + 60)} isLoading={isLoading}>
+        {!hasData(barangayData) ? <EmptyState /> : (
+          <ResponsiveContainer width="100%" height={Math.max(350, barangayData.length * 32 + 60)}>
+            <BarChart data={barangayData} layout="vertical" margin={{ top: 10, right: 50, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.08} horizontal={false} />
+              <XAxis type="number" allowDecimals={false} tick={axisTick} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11, fill: COLORS.axisText }} tickLine={false} axisLine={false} />
+              <Tooltip cursor={{ fill: 'rgba(63, 81, 181, 0.05)' }} content={<CustomTooltip />} />
+              <Bar dataKey="count" fill={COLORS.primary} radius={[0, 6, 6, 0]} barSize={20}>
+                <LabelList dataKey="count" position="right" style={{ fontSize: '11px', fontWeight: 700, fill: COLORS.axisText }} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         )}

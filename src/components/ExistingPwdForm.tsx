@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Check, 
   ChevronRight, 
@@ -13,7 +14,6 @@ import {
   ShieldCheck,
   Search,
   AlertCircle,
-  RefreshCw,
   Edit3,
   FileText,
   CheckCircle2,
@@ -54,7 +54,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
   const [lookupError, setLookupError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [actionType, setActionType] = useState<'update' | 'renewal'>('update');
+  const [actionType] = useState<'update'>('update');
   const [lookups, setLookups] = useState<Lookups | null>(null);
   const [selectedPwd, setSelectedPwd] = useState<PwdProfileFull | null>(null);
   const { showAlert, ModalComponent } = useModal();
@@ -327,7 +327,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
           disability_type_id: editForm.disability_type_id,
           cause: editForm.disability_cause as 'Acquired' | 'Congenital' | null,
           cause_details: editForm.disability_details || null
-        }] : undefined,
+        }] : [],
         employment: {
           status: editForm.employment_status || null,
           category: editForm.employment_category || null,
@@ -342,13 +342,11 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
           income_source: editForm.income_source || null,
           monthly_income: editForm.monthly_income || null
         },
-        family: familyMembers.length > 0 ? familyMembers : undefined,
-        government_ids: governmentIds.length > 0 ? governmentIds : undefined
+        family: familyMembers,
+        government_ids: governmentIds
       });
       
-      const message = actionType === 'renewal' 
-        ? "PWD ID Renewal Submitted Successfully!" 
-        : "Record Updated Successfully!";
+      const message = "Record Updated Successfully!";
       setSuccessMessage(message);
       setShowSuccessDialog(true);
     } catch (error) {
@@ -454,34 +452,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
                 </div>
               )}
 
-              {/* Action Type Selection */}
-              <div className="pt-4">
-                <p className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3 text-center">Select Action Type</p>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  <button
-                    onClick={() => setActionType('update')}
-                    className={`flex-1 flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all ${
-                      actionType === 'update'
-                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                    }`}
-                  >
-                    <Edit3 size={18} className="sm:w-5 sm:h-5" />
-                    <span className="font-bold text-xs sm:text-sm">Update Record</span>
-                  </button>
-                  <button
-                    onClick={() => setActionType('renewal')}
-                    className={`flex-1 flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all ${
-                      actionType === 'renewal'
-                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                    }`}
-                  >
-                    <RefreshCw size={18} className="sm:w-5 sm:h-5" />
-                    <span className="font-bold text-xs sm:text-sm">ID Renewal</span>
-                  </button>
-                </div>
-              </div>
+
             </div>
 
             {/* Search Button */}
@@ -521,7 +492,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
   return (
     <div className="relative bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[2.5rem] shadow-2xl shadow-gray-900/10 flex flex-col h-[90vh] overflow-hidden border border-slate-200 dark:border-slate-800">
       {/* Header */}
-      <div className="flex items-center justify-between px-8 py-6 border-b border-slate-200 dark:border-slate-800 shrink-0">
+      <div className="flex flex-wrap items-center justify-between px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-200 dark:border-slate-800 shrink-0 gap-3">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
             <Edit3 size={24} className="text-purple-600 dark:text-purple-400" />
@@ -529,14 +500,10 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
           <div>
             <div className="flex items-center gap-3">
               <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                {actionType === 'renewal' ? 'PWD ID Renewal' : 'Update PWD Record'}
+                Update PWD Record
               </h3>
-              <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                actionType === 'renewal' 
-                  ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' 
-                  : 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400'
-              }`}>
-                {actionType === 'renewal' ? 'Renewal' : 'Edit Mode'}
+              <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400">
+                Edit Mode
               </span>
             </div>
             <p className="text-slate-500 dark:text-slate-400 text-sm">
@@ -553,7 +520,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
       </div>
 
       {/* Modal Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
         <div className="max-w-4xl mx-auto space-y-8">
           {/* Personal Information */}
           <div className="bg-white/5 dark:bg-slate-800/10 rounded-2xl p-6 border border-white/10 dark:border-slate-700/20 shadow-sm backdrop-blur-md">
@@ -561,9 +528,9 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
               <User className="text-blue-600" size={20} />
               <h4 className="text-lg font-bold text-slate-900 dark:text-white">Personal Information</h4>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {!isUserAccount && (
-                <div className="md:col-span-4">
+                <div className="sm:col-span-2 md:col-span-4">
                   <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Assigned ID Number</label>
                   <input type="text" value={editForm.pwd_number} onChange={(e) => setEditForm({...editForm, pwd_number: e.target.value})}
                     className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm font-mono focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none" />
@@ -683,8 +650,8 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
               <Home className="text-orange-600" size={20} />
               <h4 className="text-lg font-bold text-slate-900 dark:text-white">Address</h4>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="sm:col-span-2 md:col-span-2">
                 <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">House/Street</label>
                 <input type="text" value={editForm.house_street} onChange={(e) => setEditForm({...editForm, house_street: e.target.value})}
                   className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none" />
@@ -721,13 +688,14 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
               <Heart className="text-red-600" size={20} />
               <h4 className="text-lg font-bold text-slate-900 dark:text-white">Disability Information</h4>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Disability Type <span className="text-rose-600 ml-0.5">*</span></label>
                 <select value={editForm.disability_type_id} onChange={(e) => setEditForm({...editForm, disability_type_id: parseInt(e.target.value)})}
                   className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none">
                   <option value={0}>Select Type...</option>
                   {lookups?.disability_types.filter(d => d.name !== 'Other').map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  {lookups?.disability_types.filter(d => d.name === 'Other').map(d => (<option key={d.id} value={d.id}>Others (Specify)</option>))}
                 </select>
               </div>
               {/* Always show custom field for historical "Other" or new manual entries, but we want it to be filled if Other was previously selected */}
@@ -870,7 +838,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
               <CreditCard className="text-teal-600" size={20} />
               <h4 className="text-lg font-bold text-slate-900 dark:text-white">Government IDs</h4>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">SSS No.</label>
                 <input type="text" value={editForm.sss_no} onChange={(e) => setEditForm({...editForm, sss_no: e.target.value})}
@@ -995,7 +963,7 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
       </div>
 
       {/* Success Dialog */}
-      {showSuccessDialog && (
+      {showSuccessDialog && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[8px]" />
           <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-md w-full p-8 transform transition-all animate-in fade-in zoom-in duration-300 border border-slate-200 dark:border-slate-800">
@@ -1025,7 +993,8 @@ const ExistingPwdForm: React.FC<FormProps> = ({ onCancel, isUserAccount = false 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Validation Modal */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Check,
   ChevronRight,
@@ -19,6 +19,9 @@ import {
   CheckCircle2,
   FileText,
   Calendar,
+  Camera,
+  Upload,
+  X,
 } from 'lucide-react';
 import type { ApplicationStatus, ApplicationStep } from './types';
 import { BARANGAY_OPTIONS } from '../constants';
@@ -135,6 +138,10 @@ const MyApplication: React.FC<MyApplicationProps> = ({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [disabilityTypes, setDisabilityTypes] = useState<DisabilityType[]>([]);
   const [barangays, setBarangays] = useState<Barangay[]>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [existingProfileId, setExistingProfileId] = useState<number | null>(null);
 
   const isSubmitted = applicationStatus && !['DRAFT', 'RETURNED'].includes(applicationStatus);
   const isReturned = applicationStatus === 'RETURNED';
@@ -192,6 +199,12 @@ const MyApplication: React.FC<MyApplicationProps> = ({
           const data = await authApi.getApplication();
           if (data && data.formData) {
             setFormData(prev => ({ ...prev, ...data.formData }));
+          }
+          if (data?.profile_id) {
+            setExistingProfileId(data.profile_id);
+          }
+          if (data?.photo_url) {
+            setPhotoPreview(data.photo_url);
           }
         } catch (error) {
           console.error('Failed to fetch application data:', error);
@@ -256,7 +269,6 @@ const MyApplication: React.FC<MyApplicationProps> = ({
       case 1: // Address
         if (!formData.houseNoStreet.trim()) errors.push('House No. / Street is required');
         if (!formData.barangay) errors.push('Barangay is required');
-        if (!formData.mobileNo.trim()) errors.push('Mobile Number is required');
         if (formData.mobileNo && formData.mobileNo.replace(/\D/g, '').length !== 11) {
           errors.push('Mobile Number must be exactly 11 digits');
         }
@@ -405,8 +417,25 @@ const MyApplication: React.FC<MyApplicationProps> = ({
       if (isReturned) {
         // Resubmit updated application through the resubmit endpoint
         await authApi.resubmitApplication(payload as any);
+        // Upload photo for resubmission if a new one was selected
+        if (photoFile && existingProfileId) {
+          try {
+            await pwdApi.uploadPhoto(existingProfileId, photoFile);
+          } catch (photoErr) {
+            console.warn('Photo upload failed on resubmit:', photoErr);
+          }
+        }
       } else {
-        await pwdApi.create(payload as any);
+        const createdProfile = await pwdApi.create(payload as any);
+        // Upload 1x1 photo if the user selected one
+        if (photoFile && createdProfile?.id) {
+          try {
+            await pwdApi.uploadPhoto(createdProfile.id, photoFile);
+          } catch (photoErr) {
+            // Non-fatal: application is submitted even if photo upload fails
+            console.warn('Photo upload failed:', photoErr);
+          }
+        }
       }
 
       // Clear draft from localStorage on successful submission
@@ -448,6 +477,81 @@ const MyApplication: React.FC<MyApplicationProps> = ({
             <SelectField label="Blood Type" value={formData.bloodType} onChange={(v) => updateField('bloodType', v)} options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']} disabled={isFieldDisabled('bloodType')} highlighted={isFieldHighlighted('bloodType')} />
             <InputField label="Religion" value={formData.religion} onChange={(v) => updateField('religion', v)} disabled={isFieldDisabled('religion')} highlighted={isFieldHighlighted('religion')} />
             <InputField label="Ethnic Group" value={formData.ethnicGroup} onChange={(v) => updateField('ethnicGroup', v)} disabled={isFieldDisabled('ethnicGroup')} highlighted={isFieldHighlighted('ethnicGroup')} />
+
+            {/* 1x1 Photo Upload — portal only */}
+            <div className="md:col-span-2">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                  1×1 ID Picture <span className="text-rose-500">*</span>
+                  <span className="ml-2 normal-case font-normal text-slate-400">(JPEG or PNG, max 5 MB — required for PWD ID card)</span>
+                </label>
+                <div className="flex items-start gap-4">
+                  {/* Preview box */}
+                  <div
+                    className="relative flex-shrink-0 w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 overflow-hidden flex items-center justify-center cursor-pointer hover:border-blue-400 transition-colors"
+                    onClick={() => !isReadOnly && photoInputRef.current?.click()}
+                    title={isReadOnly ? undefined : 'Click to upload photo'}
+                  >
+                    {photoPreview ? (
+                      <>
+                        <img src={photoPreview} alt="1x1 preview" className="w-full h-full object-cover" />
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPhotoFile(null); setPhotoPreview(null); }}
+                            className="absolute top-1 right-1 bg-rose-500 text-white rounded-full p-0.5 hover:bg-rose-600 transition-colors"
+                            title="Remove photo"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1 text-slate-400">
+                        <Camera size={24} />
+                        <span className="text-[9px] text-center leading-tight">1×1 Photo</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Upload button & instructions */}
+                  {!isReadOnly && (
+                    <div className="flex flex-col gap-2 justify-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm"
+                      >
+                        <Upload size={13} /> Choose Photo
+                      </button>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                        Upload a clear, recent 1×1 ID photo.<br />
+                        Accepted formats: JPEG, PNG.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 5 * 1024 * 1024) {
+                      setValidationErrors(['Photo file size must not exceed 5 MB.']);
+                      return;
+                    }
+                    setPhotoFile(file);
+                    const reader = new FileReader();
+                    reader.onload = () => setPhotoPreview(reader.result as string);
+                    reader.readAsDataURL(file);
+                    // Reset value so same file can be re-selected
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            </div>
           </div>
         );
 

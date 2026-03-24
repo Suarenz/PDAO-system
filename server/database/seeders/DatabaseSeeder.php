@@ -15,9 +15,7 @@ class DatabaseSeeder extends Seeder
             BarangaySeeder::class,
             DisabilityTypeSeeder::class,
             AdminUserSeeder::class,
-            StaffUserSeeder::class,
             MayorUserSeeder::class,
-            RegularUserSeeder::class,
         ]);
     }
 }

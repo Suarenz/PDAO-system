@@ -23,6 +23,7 @@ use App\Observers\VersionObserver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class PwdController extends Controller
@@ -105,10 +106,12 @@ class PwdController extends Controller
 
         // Search
         if ($request->has('search')) {
-            $search = $request->search;
+            $search = trim(preg_replace('/\s+/', ' ', (string) $request->search));
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('middle_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('suffix', 'like', "%{$search}%")
                   ->orWhere('pwd_number', 'like', "%{$search}%");
             });
         }
@@ -119,7 +122,7 @@ class PwdController extends Controller
         }
 
         $profiles = $query->orderBy('created_at', 'desc')
-                         ->paginate($request->per_page ?? 15);
+                         ->paginate($request->per_page ?? 10);
 
         // Transform data for frontend
         $data = $profiles->map(function ($profile) {
@@ -147,10 +150,12 @@ class PwdController extends Controller
             });
         }
         if ($request->has('search')) {
-            $search = $request->search;
+            $search = trim(preg_replace('/\s+/', ' ', (string) $request->search));
             $countQuery->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('middle_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('suffix', 'like', "%{$search}%")
                   ->orWhere('pwd_number', 'like', "%{$search}%");
             });
         }
@@ -384,16 +389,19 @@ class PwdController extends Controller
             $changeSummary = [];
 
             // Update main profile
-            $pwd->update([
-                'pwd_number' => $validated['pwd_number'] ?? $pwd->pwd_number,
-                'first_name' => $validated['first_name'] ?? $pwd->first_name,
-                'last_name' => $validated['last_name'] ?? $pwd->last_name,
-                'middle_name' => $validated['middle_name'] ?? $pwd->middle_name,
-                'suffix' => $validated['suffix'] ?? $pwd->suffix,
-                'remarks' => $validated['remarks'] ?? $pwd->remarks,
-                'accessibility_needs' => $validated['accessibility_needs'] ?? $pwd->accessibility_needs,
-                'service_needs' => $validated['service_needs'] ?? $pwd->service_needs,
-            ]);
+            $mainFields = [
+                'pwd_number', 'first_name', 'last_name', 'middle_name', 'suffix',
+                'remarks', 'accessibility_needs', 'service_needs'
+            ];
+            $mainUpdates = [];
+            foreach ($mainFields as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $mainUpdates[$field] = $validated[$field];
+                }
+            }
+            if (!empty($mainUpdates)) {
+                $pwd->update($mainUpdates);
+            }
 
             // Update personal info
             if (isset($validated['personal_info'])) {
@@ -460,6 +468,38 @@ class PwdController extends Controller
                 $pwd->householdInfo()->updateOrCreate(
                     ['pwd_profile_id' => $pwd->id],
                     $validated['household_info']
+                );
+            }
+
+            // Update family members
+            if (isset($validated['family'])) {
+                $pwd->familyMembers()->delete();
+                foreach ($validated['family'] as $member) {
+                    PwdFamily::create([
+                        'pwd_profile_id' => $pwd->id,
+                        ...$member,
+                    ]);
+                }
+            }
+
+            // Update government IDs
+            if (isset($validated['government_ids'])) {
+                $pwd->governmentIds()->delete();
+                foreach ($validated['government_ids'] as $govId) {
+                    if (!empty($govId['id_number'])) {
+                        PwdGovernmentId::create([
+                            'pwd_profile_id' => $pwd->id,
+                            ...$govId,
+                        ]);
+                    }
+                }
+            }
+
+            // Update organization
+            if (isset($validated['organization'])) {
+                $pwd->organization()->updateOrCreate(
+                    ['pwd_profile_id' => $pwd->id],
+                    $validated['organization']
                 );
             }
 
@@ -924,6 +964,10 @@ class PwdController extends Controller
             'accessibility_needs' => $profile->accessibility_needs,
             'service_needs' => $profile->service_needs,
             'date_applied' => $profile->date_applied,
+            'date_approved' => $profile->date_approved,
+            'expiry_date' => $profile->expiry_date,
+            'card_printed' => (bool) $profile->card_printed,
+            'card_printed_at' => $profile->card_printed_at,
             'personal_info' => $profile->personalInfo,
             'address' => [
                 ...$profile->address?->toArray() ?? [],
@@ -947,6 +991,68 @@ class PwdController extends Controller
             'created_at' => $profile->created_at,
             'updated_at' => $profile->updated_at,
         ];
+    }
+
+    /**
+     * Upload 1x1 applicant photo for the pending registration linked to a PWD profile.
+     * Only the applicant (portal user) or admin may use this endpoint.
+     */
+    public function uploadPhoto(Request $request, PwdProfile $pwd): JsonResponse
+    {
+        $request->validate([
+            'photo' => 'required|image|mimes:jpeg,jpg,png|max:5120', // 5 MB max
+        ]);
+
+        $pendingReg = PendingRegistration::where('pwd_profile_id', $pwd->id)
+            ->whereIn('status', ['PENDING', 'UNDER_REVIEW'])
+            ->first();
+
+        if (!$pendingReg) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active pending registration found for this profile.',
+            ], 404);
+        }
+
+        // Delete old photo if it exists
+        if ($pendingReg->photo_path) {
+            Storage::disk('public')->delete($pendingReg->photo_path);
+        }
+
+        // Store new photo with a unique filename
+        $filename = 'photos/pwd_' . $pwd->id . '_' . uniqid() . '.' . $request->file('photo')->getClientOriginalExtension();
+        $request->file('photo')->storeAs('', $filename, 'public');
+
+        $pendingReg->update(['photo_path' => $filename]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Photo uploaded successfully.',
+            'data' => [
+                'photo_url' => asset('storage/' . $filename),
+            ],
+        ]);
+    }
+
+    /**
+     * Download the applicant photo for a pending registration (admin only).
+     */
+    public function downloadPhoto(PendingRegistration $approval): mixed
+    {
+        if (!$approval->photo_path || !Storage::disk('public')->exists($approval->photo_path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No photo found for this registration.',
+            ], 404);
+        }
+
+        $path = Storage::disk('public')->path($approval->photo_path);
+        $mimeType = mime_content_type($path) ?: 'image/jpeg';
+        $fileName = 'applicant_photo_REG-' . $approval->id . '.' . pathinfo($approval->photo_path, PATHINFO_EXTENSION);
+
+        return response()->download($path, $fileName, [
+            'Content-Type' => $mimeType,
+        ]);
     }
 
     protected function createVersionSnapshot(PwdProfile $profile, string $summary): void

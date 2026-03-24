@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Check, 
   ChevronRight, 
@@ -41,7 +42,7 @@ const InputWrapper = ({ label, children, required = false }: { label: string, ch
 const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = false }) => {
   const { isAdmin } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = isUserRegistration ? 6 : 7;
+  const totalSteps = isUserRegistration ? 5 : 6;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -134,8 +135,8 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
   const nextStep = () => {
     // Validation for Step 1
     if (currentStep === 1) {
-      if (!formData.lastName.trim() || !formData.firstName.trim() || !formData.middleName.trim()) {
-        showAlert('Validation Error', 'Last Name, First Name, and Middle Name are required.', 'warning');
+      if (!formData.lastName.trim() || !formData.firstName.trim()) {
+        showAlert('Validation Error', 'Last Name and First Name are required.', 'warning');
         return;
       }
       if (!formData.dob) {
@@ -164,9 +165,6 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
           showAlert('Validation Error', 'Mobile Number must be exactly 11 digits.', 'warning');
           return;
         }
-      } else {
-        showAlert('Validation Error', 'Mobile Number is required.', 'warning');
-        return;
       }
     }
 
@@ -182,9 +180,8 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
     { id: 2, title: 'Disability', icon: Activity },
     { id: 3, title: 'Residence', icon: MapPin },
     { id: 4, title: 'Work & ID', icon: Briefcase },
-    { id: 5, title: 'Family', icon: ShieldCheck },
-    { id: 6, title: 'Household Information', icon: HeartHandshake },
-    ...(!isUserRegistration ? [{ id: 7, title: 'Other', icon: Save }] : []),
+    { id: 5, title: 'Family & Household', icon: ShieldCheck },
+    ...(!isUserRegistration ? [{ id: 6, title: 'Other', icon: Save }] : []),
   ];
 
   const handleSubmit = async () => {
@@ -370,7 +367,7 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
   };
 
   return (
-    <div className="relative bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl shadow-gray-900/10 flex flex-col h-[90vh] overflow-hidden border border-slate-200 dark:border-slate-800">
+    <div className="relative bg-white dark:bg-slate-900 rounded-[1.5rem] sm:rounded-[2.5rem] shadow-2xl shadow-gray-900/10 flex flex-col h-[90vh] overflow-hidden border border-slate-200 dark:border-slate-800">
       <style>{`
         .form-input-pdao {
             width: 100%;
@@ -416,26 +413,26 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
       `}</style>
 
       {/* Header */}
-      <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-100 dark:border-slate-800 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">{isUserRegistration ? 'Register New PWD' : 'PWD Registration Portal'}</h2>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white tracking-tight">{isUserRegistration ? 'Register New PWD' : 'PWD Registration Portal'}</h2>
           <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">{isUserRegistration ? 'Submit your PWD application for approval' : 'New Applicant Entry'}</p>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1">
           {steps.map((s, i) => (
-            <div key={s.id} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${currentStep >= s.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'}`}>
-                {currentStep > s.id ? <Check size={14} /> : s.id}
+            <div key={s.id} className="flex items-center flex-shrink-0">
+              <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black transition-all ${currentStep >= s.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'}`}>
+                {currentStep > s.id ? <Check size={11} /> : s.id}
               </div>
-              {i < steps.length - 1 && <div className={`w-4 h-0.5 mx-1 rounded-full ${currentStep > s.id ? 'bg-gray-700' : 'bg-slate-200 dark:bg-slate-800'}`} />}
+              {i < steps.length - 1 && <div className={`w-2 sm:w-4 h-0.5 mx-0.5 sm:mx-1 rounded-full flex-shrink-0 ${currentStep > s.id ? 'bg-gray-700' : 'bg-slate-200 dark:bg-slate-800'}`} />}
             </div>
           ))}
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-8 md:p-12">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8 md:p-12">
         <div className="max-w-4xl mx-auto">
            <div className="flex items-center gap-3 mb-10">
               <div className="p-3 bg-gray-50 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400 rounded-2xl">
@@ -458,7 +455,7 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
                <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                  <InputWrapper label="Last Name" required><input name="lastName" value={formData.lastName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
                  <InputWrapper label="First Name" required><input name="firstName" value={formData.firstName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                 <InputWrapper label="Middle Name" required><input name="middleName" value={formData.middleName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                 <InputWrapper label="Middle Name"><input name="middleName" value={formData.middleName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
                  <InputWrapper label="Suffix"><input name="suffix" value={formData.suffix} onChange={handleInputChange} className="form-input-pdao" placeholder="Jr., III" /></InputWrapper>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -517,6 +514,11 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
                          </label>
                      ))}
                  </div>
+                 <div className="mt-4">
+                   <InputWrapper label="Others (Specify)">
+                     <input name="otherCause" value={formData.otherCause} onChange={handleInputChange} className="form-input-pdao" placeholder="If your disability type is not listed above, specify here" />
+                   </InputWrapper>
+                 </div>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-slate-200 dark:border-slate-800">
                  <InputWrapper label="11. Cause of Disability">
@@ -526,7 +528,6 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
                          <option value="Congenital">Congenital</option>
                      </select>
                  </InputWrapper>
-                 <InputWrapper label="Others (Specify)"><input name="otherCause" value={formData.otherCause} onChange={handleInputChange} className="form-input-pdao" placeholder="Specify if not in list" /></InputWrapper>
                </div>
              </div>
            )}
@@ -547,7 +548,7 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
                      <InputWrapper label="Region"><input readOnly value="4A" className="form-input-pdao bg-slate-100 dark:bg-slate-800/50 cursor-not-allowed border-slate-200 dark:border-slate-800" /></InputWrapper>
                  </div>
                  <div className="pt-8 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-5">
-                     <InputWrapper label="Mobile Number" required><input name="mobileNo" value={formData.mobileNo} onChange={handleInputChange} className="form-input-pdao" placeholder="09XX-XXX-XXXX" /></InputWrapper>
+                     <InputWrapper label="Mobile Number"><input name="mobileNo" value={formData.mobileNo} onChange={handleInputChange} className="form-input-pdao" placeholder="09XX-XXX-XXXX" /></InputWrapper>
                      <InputWrapper label="E-mail Address"><input type="email" name="email" value={formData.email} onChange={handleInputChange} className="form-input-pdao" placeholder="example@email.com" /></InputWrapper>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -601,7 +602,7 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
                      <InputWrapper label="Source of Income"><input name="sourceOfIncome" value={formData.sourceOfIncome} onChange={handleInputChange} className="form-input-pdao" placeholder="e.g., Salary, Business, Pension" /></InputWrapper>
                      <InputWrapper label="Estimated Monthly Income"><input name="monthlyIncome" value={formData.monthlyIncome} onChange={handleInputChange} className="form-input-pdao" placeholder="Php 0.00" /></InputWrapper>
                  </div>
-                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-slate-200">
+                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-slate-200">
                      <InputWrapper label="SSS NO."><input name="sssNo" value={formData.sssNo} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
                      <InputWrapper label="GSIS NO."><input name="gsisNo" value={formData.gsisNo} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
                      <InputWrapper label="Pag-IBIG NO."><input name="pagibigNo" value={formData.pagibigNo} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
@@ -612,53 +613,54 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
 
            {currentStep === 5 && (
              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                 <h4 className="text-[10px] font-black text-gray-700 uppercase border-b pb-2 tracking-widest border-slate-200">19. Family Background</h4>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                     <InputWrapper label="Father's Last Name"><input name="fatherLName" value={formData.fatherLName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                     <InputWrapper label="Father's First Name"><input name="fatherFName" value={formData.fatherFName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                     <InputWrapper label="Father's Middle Name"><input name="fatherMName" value={formData.fatherMName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                 <div className="space-y-4">
+                     <h4 className="text-[10px] font-black text-gray-700 uppercase border-b pb-2 tracking-widest border-slate-200">19. Family Background</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                         <InputWrapper label="Father's Last Name"><input name="fatherLName" value={formData.fatherLName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                         <InputWrapper label="Father's First Name"><input name="fatherFName" value={formData.fatherFName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                         <InputWrapper label="Father's Middle Name"><input name="fatherMName" value={formData.fatherMName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                         <InputWrapper label="Mother's Last Name"><input name="motherLName" value={formData.motherLName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                         <InputWrapper label="Mother's First Name"><input name="motherFName" value={formData.motherFName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                         <InputWrapper label="Mother's Middle Name"><input name="motherMName" value={formData.motherMName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                         <InputWrapper label="Guardian's Last Name"><input name="guardianLName" value={formData.guardianLName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                         <InputWrapper label="Guardian's First Name"><input name="guardianFName" value={formData.guardianFName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                         <InputWrapper label="Guardian's Middle Name"><input name="guardianMName" value={formData.guardianMName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+                     </div>
                  </div>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                     <InputWrapper label="Mother's Last Name"><input name="motherLName" value={formData.motherLName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                     <InputWrapper label="Mother's First Name"><input name="motherFName" value={formData.motherFName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                     <InputWrapper label="Mother's Middle Name"><input name="motherMName" value={formData.motherMName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                 </div>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                     <InputWrapper label="Guardian's Last Name"><input name="guardianLName" value={formData.guardianLName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                     <InputWrapper label="Guardian's First Name"><input name="guardianFName" value={formData.guardianFName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
-                     <InputWrapper label="Guardian's Middle Name"><input name="guardianMName" value={formData.guardianMName} onChange={handleInputChange} className="form-input-pdao" /></InputWrapper>
+
+                 <div className="space-y-4 pt-6 border-t border-slate-200">
+                     <h4 className="text-[10px] font-black text-gray-700 uppercase border-b pb-2 tracking-widest border-slate-200">Household Information</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                         <InputWrapper label="Name of Spouse"><input name="spouseName" value={formData.spouseName} onChange={handleInputChange} className="form-input-pdao" placeholder="Full Name" /></InputWrapper>
+                         <InputWrapper label="Spouse Age"><input name="spouseAge" value={formData.spouseAge} onChange={handleInputChange} className="form-input-pdao" placeholder="Age" /></InputWrapper>
+                     </div>
+                     <div>
+                         <InputWrapper label="Living Arrangement">
+                             <div className="flex gap-6 py-3 px-1 flex-wrap">
+                                 <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300 group">
+                                     <input type="radio" name="livingArrangement" value="Living Alone" checked={formData.livingArrangement === 'Living Alone'} onChange={handleInputChange} className="w-4 h-4 accent-gray-700" />
+                                     <span className="group-hover:text-gray-700 transition-colors">Living Alone</span>
+                                 </label>
+                                 <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300 group">
+                                     <input type="radio" name="livingArrangement" value="Living with Husband/Wife" checked={formData.livingArrangement === 'Living with Husband/Wife'} onChange={handleInputChange} className="w-4 h-4 accent-gray-700" />
+                                     <span className="group-hover:text-gray-700 transition-colors">Living with Husband/Wife</span>
+                                 </label>
+                                 <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300 group">
+                                     <input type="radio" name="livingArrangement" value="Living with Family" checked={formData.livingArrangement === 'Living with Family'} onChange={handleInputChange} className="w-4 h-4 accent-gray-700" />
+                                     <span className="group-hover:text-gray-700 transition-colors">Living with Family</span>
+                                 </label>
+                             </div>
+                         </InputWrapper>
+                     </div>
                  </div>
              </div>
            )}
 
            {currentStep === 6 && (
-             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                     <InputWrapper label="Name of Spouse"><input name="spouseName" value={formData.spouseName} onChange={handleInputChange} className="form-input-pdao" placeholder="Full Name" /></InputWrapper>
-                     <InputWrapper label="Spouse Age"><input name="spouseAge" value={formData.spouseAge} onChange={handleInputChange} className="form-input-pdao" placeholder="Age" /></InputWrapper>
-                 </div>
-                 <div className="pt-6 border-t border-slate-200">
-                     <InputWrapper label="Living Arrangement">
-                         <div className="flex gap-6 py-3 px-1 flex-wrap">
-                             <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300 group">
-                                 <input type="radio" name="livingArrangement" value="Living Alone" checked={formData.livingArrangement === 'Living Alone'} onChange={handleInputChange} className="w-4 h-4 accent-gray-700" />
-                                 <span className="group-hover:text-gray-700 transition-colors">Living Alone</span>
-                             </label>
-                             <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300 group">
-                                 <input type="radio" name="livingArrangement" value="Living with Husband/Wife" checked={formData.livingArrangement === 'Living with Husband/Wife'} onChange={handleInputChange} className="w-4 h-4 accent-gray-700" />
-                                 <span className="group-hover:text-gray-700 transition-colors">Living with Husband/Wife</span>
-                             </label>
-                             <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300 group">
-                                 <input type="radio" name="livingArrangement" value="Living with Family" checked={formData.livingArrangement === 'Living with Family'} onChange={handleInputChange} className="w-4 h-4 accent-gray-700" />
-                                 <span className="group-hover:text-gray-700 transition-colors">Living with Family</span>
-                             </label>
-                         </div>
-                     </InputWrapper>
-                 </div>
-             </div>
-           )}
-
-           {currentStep === 7 && (
              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                  <h4 className="text-[10px] font-black text-gray-700 uppercase border-b pb-2 tracking-widest border-slate-200">Additional Information</h4>
                  <InputWrapper label="Accomplished By">
@@ -728,7 +730,7 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
       </div>
 
       {/* Success Dialog */}
-      {showSuccessDialog && (
+      {showSuccessDialog && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[8px]" />
           <div className="relative bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl max-w-md w-full p-8 transform transition-all animate-in fade-in zoom-in-95 duration-300 border border-slate-200 dark:border-slate-800">
@@ -759,7 +761,8 @@ const NewApplicantForm: React.FC<FormProps> = ({ onCancel, isUserRegistration = 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Validation Modal */}

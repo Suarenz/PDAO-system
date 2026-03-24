@@ -147,6 +147,10 @@ export interface PwdProfile {
 export interface PwdProfileFull extends PwdProfile {
   current_version: number;
   remarks: string | null;
+  date_approved: string | null;
+  expiry_date: string | null;
+  card_printed: boolean;
+  card_printed_at: string | null;
   personal_info: {
     birth_date: string | null;
     birth_place: string | null;
@@ -217,6 +221,7 @@ export interface PwdProfileFull extends PwdProfile {
   } | null;
   accessibility_needs?: string | null;
   service_needs?: string | null;
+  updated_at: string;
 }
 
 // Lookup types
@@ -274,6 +279,7 @@ export interface PendingApproval {
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_notes: string | null;
+  photo_url?: string | null;
 }
 
 // Backup

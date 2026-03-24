@@ -16,7 +16,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('pwd_profile_id')->constrained('pwd_profiles')->onDelete('cascade');
             $table->unsignedInteger('version_number');
-            $table->json('snapshot'); // Complete profile data as JSON
+            $table->longText('snapshot'); // Complete profile data as JSON
             $table->foreignId('changed_by')->nullable()->constrained('users')->onDelete('set null');
             $table->string('change_summary')->nullable();
             $table->timestamp('changed_at');

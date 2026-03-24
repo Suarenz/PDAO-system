@@ -103,17 +103,17 @@ const AppointmentManagement: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-            <CalendarDays size={24} className="text-blue-600" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2 sm:gap-3">
+            <CalendarDays size={22} className="text-blue-600 shrink-0" />
             Appointment Management
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             View and manage scheduled appointments for ID pickup
           </p>
         </div>
-        <button onClick={() => { fetchAppointments(); fetchStats(); }} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+        <button onClick={() => { fetchAppointments(); fetchStats(); }} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors shrink-0">
           <RefreshCw size={18} />
         </button>
       </div>

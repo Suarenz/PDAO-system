@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\Backup;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\Process\Process;
@@ -58,8 +59,9 @@ class BackupController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        $timestamp = now()->format('Y-m-d_His');
-        $fileName = "pdao_backup_{$timestamp}.sql";
+        $timestamp = now()->format('Y-m-d_His_u');
+        $uniqueSuffix = str_replace('.', '', uniqid('', true));
+        $fileName = "pdao_backup_{$timestamp}_{$uniqueSuffix}.sql";
         $filePath = $fileName;
 
         // Create backup record first
@@ -107,7 +109,7 @@ class BackupController extends Controller
 
             // Build mysqldump command
             $command = sprintf(
-                '%s --host=%s --port=%s --user=%s %s %s',
+                '%s --host=%s --port=%s --user=%s %s --default-character-set=utf8mb4 %s',
                 escapeshellarg($mysqldump),
                 escapeshellarg($backupHost),
                 escapeshellarg($port),
@@ -116,7 +118,8 @@ class BackupController extends Controller
                 escapeshellarg($database)
             );
 
-            \Log::info("Executing backup: " . $command . " > " . $fullPath);
+            $safeCommand = $this->sanitizePasswordInCommand($command);
+            \Log::info("Executing backup: " . $safeCommand . " > " . $fullPath);
 
             // Execute mysqldump
             // We pass the current environment variables (like SystemRoot) which is
@@ -137,8 +140,18 @@ class BackupController extends Controller
                 throw new \Exception('Process failed: ' . $error);
             }
 
-            // Update backup record with file size
+            if (!Storage::disk('backups')->exists($filePath)) {
+                throw new \Exception('Backup output file was not created.');
+            }
+
+            // Ensure backup file is not empty before marking as completed.
             $size = Storage::disk('backups')->size($filePath);
+            if ($size <= 0) {
+                Storage::disk('backups')->delete($filePath);
+                throw new \Exception('Backup file is empty. Please check MySQL credentials and disk space.');
+            }
+
+            // Update backup record with file size
             $backup->update([
                 'status' => 'COMPLETED',
                 'size' => $this->formatBytes($size),
@@ -191,6 +204,8 @@ class BackupController extends Controller
      */
     public function restore(Request $request): JsonResponse
     {
+        $tempDirForCleanup = null;
+
         // Validate: either backup_id or file must be provided
         $request->validate([
             'backup_id' => 'nullable|exists:backups,id',
@@ -233,7 +248,7 @@ class BackupController extends Controller
 
                 // Handle compressed files: extract first
                 if (in_array($extension, ['zip', 'gz'])) {
-                    $extractedPath = $this->extractCompressedBackup($uploadedFile);
+                    $extractedPath = $this->extractCompressedBackup($uploadedFile, $tempDirForCleanup);
                     if (!$extractedPath) {
                         return response()->json([
                             'success' => false,
@@ -254,6 +269,14 @@ class BackupController extends Controller
                 ], 500);
             }
 
+            $fileSize = @filesize($filePath);
+            if ($fileSize === false || $fileSize <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Backup file is empty or unreadable.',
+                ], 422);
+            }
+
             // Get database config
             $host = config('database.connections.mysql.host');
             $port = config('database.connections.mysql.port');
@@ -272,7 +295,7 @@ class BackupController extends Controller
 
             // Build mysql restore command
             $command = sprintf(
-                '%s --host=%s --port=%s --user=%s %s %s < %s',
+                '%s --host=%s --port=%s --user=%s %s --default-character-set=utf8mb4 %s < %s',
                 escapeshellarg($mysql),
                 escapeshellarg($backupHost),
                 escapeshellarg($port),
@@ -282,7 +305,7 @@ class BackupController extends Controller
                 escapeshellarg($filePath)
             );
 
-            \Log::info("Executing restore command: " . preg_replace('/--password=\S+/', '--password=***', $command));
+            \Log::info("Executing restore command: " . $this->sanitizePasswordInCommand($command));
 
             // Execute restore
             $process = Process::fromShellCommandline(
@@ -305,6 +328,10 @@ class BackupController extends Controller
 
             \Log::info("Database restore completed successfully.");
 
+            // Repair mojibake: fix ñ and other Filipino/special characters that may have been
+            // stored with double-encoding (UTF-8 bytes misread as Latin-1 during old imports).
+            $this->repairMojibake();
+
             // Log activity
             ActivityLog::log('restore', null, null, null, null, 'Database restored from backup');
 
@@ -319,7 +346,42 @@ class BackupController extends Controller
                 'success' => false,
                 'message' => 'Restore failed: ' . $e->getMessage(),
             ], 500);
+        } finally {
+            if (is_string($tempDirForCleanup) && $tempDirForCleanup !== '') {
+                $this->cleanupTempDirectory($tempDirForCleanup);
+            }
         }
+    }
+
+    /**
+     * Repair mojibake in name fields caused by UTF-8 data stored through a Latin-1 connection.
+     * The pattern: UTF-8 bytes of a character (e.g. ñ = 0xC3 0xB1) were treated as Latin-1,
+     * producing two characters (e.g. Ã±) which were then stored in the UTF-8 column.
+     * Fix: CONVERT(CONVERT(col USING latin1) USING utf8mb4) re-interprets the bytes correctly.
+     */
+    protected function repairMojibake(): void
+    {
+        $tablesColumns = [
+            'pwd_profiles' => ['first_name', 'last_name', 'middle_name', 'suffix'],
+            'pwd_family'   => ['first_name', 'last_name', 'middle_name'],
+        ];
+
+        foreach ($tablesColumns as $table => $columns) {
+            // Build a WHERE clause that detects the mojibake pattern (Ã or Â prefix characters)
+            $whereConditions = implode(' OR ', array_map(
+                fn($col) => "`{$col}` LIKE '%Ã%' OR `{$col}` LIKE '%Â%'",
+                $columns
+            ));
+
+            $setClauses = implode(', ', array_map(
+                fn($col) => "`{$col}` = CONVERT(CONVERT(`{$col}` USING latin1) USING utf8mb4)",
+                $columns
+            ));
+
+            DB::statement("UPDATE `{$table}` SET {$setClauses} WHERE {$whereConditions}");
+        }
+
+        \Log::info('Mojibake repair completed.');
     }
 
     /**
@@ -356,10 +418,11 @@ class BackupController extends Controller
     /**
      * Extract a compressed backup file (.zip or .gz) and return path to the .sql file inside
      */
-    protected function extractCompressedBackup($uploadedFile): ?string
+    protected function extractCompressedBackup($uploadedFile, ?string &$tempDirForCleanup = null): ?string
     {
         $extension = strtolower($uploadedFile->getClientOriginalExtension());
         $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pdao_restore_' . uniqid();
+        $tempDirForCleanup = $tempDir;
         @mkdir($tempDir, 0777, true);
 
         try {
@@ -388,6 +451,38 @@ class BackupController extends Controller
             \Log::error('Failed to extract compressed backup: ' . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * Remove temporary restore directory and extracted files.
+     */
+    protected function cleanupTempDirectory(string $tempDir): void
+    {
+        $systemTemp = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (!str_starts_with($tempDir, $systemTemp) || !str_contains($tempDir, 'pdao_restore_') || !is_dir($tempDir)) {
+            return;
+        }
+
+        $items = glob($tempDir . DIRECTORY_SEPARATOR . '*');
+        if (is_array($items)) {
+            foreach ($items as $item) {
+                if (is_dir($item)) {
+                    $this->cleanupTempDirectory($item);
+                } else {
+                    @unlink($item);
+                }
+            }
+        }
+
+        @rmdir($tempDir);
+    }
+
+    /**
+     * Mask password arguments in shell command logs.
+     */
+    protected function sanitizePasswordInCommand(string $command): string
+    {
+        return (string) preg_replace('/--password=(?:\"[^\"]*\"|\'[^\']*\'|\S*)/', '--password=***', $command);
     }
 
     /**

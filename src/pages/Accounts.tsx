@@ -27,7 +27,7 @@ interface UserAccount {
   id_number?: string;
   username?: string;
   name: string;
-  role: 'ADMIN' | 'STAFF' | 'ENCODER' | 'USER' | 'PWD MEMBER' | 'MAYOR';
+  role: 'ADMIN' | 'ENCODER' | 'PWD MEMBER' | 'MAYOR';
   unit: string;
   status: 'ACTIVE' | 'INACTIVE';
   initial: string;
@@ -38,7 +38,7 @@ interface UserAccount {
 }
 
 const Accounts: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'all' | 'admins' | 'staff' | 'pwd'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'admins' | 'pwd'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +62,7 @@ const Accounts: React.FC = () => {
     id_number: '',
     password: '',
     confirm_password: '',
-    role: 'STAFF' as 'ADMIN' | 'STAFF' | 'ENCODER' | 'USER' | 'PWD MEMBER' | 'MAYOR',
+    role: 'ENCODER' as 'ADMIN' | 'ENCODER' | 'PWD MEMBER' | 'MAYOR',
     unit: '',
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE'
   });
@@ -90,7 +90,6 @@ const Accounts: React.FC = () => {
       
       // Tab-specific filters
       if (activeTab === 'admins') filters.role = 'ADMIN';
-      if (activeTab === 'staff') filters.role = 'STAFF';
       if (activeTab === 'pwd') filters.role = 'PWD MEMBER';
 
       const response = await usersApi.getAll(filters);
@@ -156,7 +155,7 @@ const Accounts: React.FC = () => {
       id_number: '',
       password: '',
       confirm_password: '',
-      role: 'STAFF',
+      role: 'ENCODER',
       unit: '',
       status: 'ACTIVE'
     });
@@ -303,7 +302,6 @@ const Accounts: React.FC = () => {
   const getRoleBadgeColor = (role: string) => {
     switch(role) {
       case 'ADMIN': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
-      case 'STAFF': return 'bg-blue-100 text-blue-600 border-blue-200';
       case 'ENCODER': return 'bg-purple-100 text-purple-600 border-purple-200';
       case 'PWD MEMBER': return 'bg-emerald-100 text-emerald-600 border-emerald-200';
       case 'MAYOR': return 'bg-amber-100 text-amber-700 border-amber-200';
@@ -314,7 +312,6 @@ const Accounts: React.FC = () => {
   const tabs = [
     { id: 'all', label: 'All Accounts', count: pagination.total, icon: Users },
     { id: 'admins', label: 'Administrators', icon: Shield },
-    { id: 'staff', label: 'Staff', icon: User },
     { id: 'pwd', label: 'PWD Members', icon: Users },
   ];
 
@@ -571,7 +568,7 @@ const Accounts: React.FC = () => {
 
             {/* Form */}
             <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                     First Name *
@@ -613,7 +610,7 @@ const Accounts: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                     Username
@@ -640,7 +637,7 @@ const Accounts: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                     Password {!editModalOpen && '*'}
@@ -678,7 +675,7 @@ const Accounts: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                     Role *

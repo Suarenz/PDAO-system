@@ -64,6 +64,17 @@ export const approvalApi = {
   markForReview: async (id: number, notes?: string): Promise<void> => {
     await api.post(`/approvals/${id}/mark-review`, { notes });
   },
+
+  /**
+   * Download the applicant 1x1 photo for an approval (admin only).
+   * Returns a Blob so the caller can trigger a browser download.
+   */
+  downloadPhoto: async (id: number): Promise<Blob> => {
+    const response = await api.get(`/approvals/${id}/download-photo`, {
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
 };
 
 export default approvalApi;

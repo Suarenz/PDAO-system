@@ -196,9 +196,9 @@ const HistoryLog: React.FC = () => {
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
       {/* Page Title & Action */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Activity History</h2>
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Activity History</h2>
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Month Selector */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -237,7 +237,7 @@ const HistoryLog: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xl shadow-slate-200/20">
         
         {/* Table Header */}
-        <div className="grid grid-cols-12 px-8 py-6 border-b border-slate-50 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/50">
+        <div className="hidden sm:grid sm:grid-cols-12 px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-50 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/50">
            <div className="col-span-8 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Activity Details</div>
            <div className="col-span-4 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">Time & User</div>
         </div>
@@ -246,17 +246,17 @@ const HistoryLog: React.FC = () => {
         {isLoading ? (
           <div className="divide-y divide-slate-50 dark:divide-slate-800">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="grid grid-cols-12 px-8 py-6 items-center">
-                <div className="col-span-8 flex items-start gap-5">
+              <div key={i} className="flex flex-col sm:grid sm:grid-cols-12 px-4 sm:px-8 py-4 sm:py-6 gap-3 sm:gap-0 sm:items-center">
+                <div className="sm:col-span-8 flex items-start gap-5">
                   <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
                   <div className="space-y-2 flex-1">
                     <Skeleton className="h-4 w-3/4" />
                     <Skeleton className="h-3 w-1/4" />
                   </div>
                 </div>
-                <div className="col-span-4 text-right space-y-2">
-                  <Skeleton className="h-4 w-20 ml-auto" />
-                  <Skeleton className="h-3 w-24 ml-auto" />
+                <div className="sm:col-span-4 sm:text-right space-y-2 pl-14 sm:pl-0">
+                  <Skeleton className="h-4 w-20 sm:ml-auto" />
+                  <Skeleton className="h-3 w-24 sm:ml-auto" />
                 </div>
               </div>
             ))}
@@ -265,23 +265,23 @@ const HistoryLog: React.FC = () => {
           <div className="divide-y divide-slate-50 dark:divide-slate-800">
             {logs.length > 0 ? (
               logs.map((log) => (
-                <div key={log.id} className="grid grid-cols-12 px-8 py-6 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors items-center group">
+                <div key={log.id} className="flex flex-col sm:grid sm:grid-cols-12 px-4 sm:px-8 py-4 sm:py-6 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors items-start sm:items-center gap-2 sm:gap-0 group">
                   
                   {/* Activity Info */}
-                  <div className="col-span-8 flex items-start gap-5">
+                  <div className="sm:col-span-8 flex items-start gap-4 sm:gap-5 w-full">
                     <div className="mt-0.5 shrink-0 transition-transform group-hover:scale-110 duration-300">
                        {getLogIcon(log.type)}
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{log.message}</p>
-                      <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500 tracking-wider">Reference ID: {log.refId}</p>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-snug">{log.message}</p>
+                      <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500 tracking-wider truncate">Reference ID: {log.refId}</p>
                     </div>
                   </div>
 
                   {/* Time & User */}
-                  <div className="col-span-4 text-right">
+                  <div className="sm:col-span-4 sm:text-right pl-9 sm:pl-0">
                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{log.timestamp}</p>
-                     <div className="flex items-center justify-end gap-1.5 mt-1 text-slate-400">
+                     <div className="flex items-center sm:justify-end gap-1.5 mt-1 text-slate-400">
                        <User size={12} className="opacity-60" />
                        <p className="text-[11px] italic font-medium">{log.user}</p>
                      </div>

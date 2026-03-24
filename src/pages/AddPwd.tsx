@@ -7,9 +7,10 @@ import { dashboardApi, RecentPwd } from '../api/dashboard';
 
 interface AddPwdProps {
   userRole?: string;
+  onViewPwdDetails?: (pwdId: number) => void;
 }
 
-const AddPwd: React.FC<AddPwdProps> = ({ userRole }) => {
+const AddPwd: React.FC<AddPwdProps> = ({ userRole, onViewPwdDetails }) => {
   const [view, setView] = useState<'selection' | 'new-form' | 'existing-form'>(
     userRole === 'ENCODER' || userRole === 'USER' ? 'existing-form' : 'selection'
   );
@@ -51,7 +52,7 @@ const AddPwd: React.FC<AddPwdProps> = ({ userRole }) => {
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
-    
+
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
     if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
@@ -172,7 +173,7 @@ const AddPwd: React.FC<AddPwdProps> = ({ userRole }) => {
                 {recentRecords.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer">
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col" onClick={() => onViewPwdDetails?.(item.id)}>
                         <p className="text-sm font-medium text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{item.name}</p>
                         <p className="text-xs text-slate-500">{item.pwd_number || 'New Applicant'}</p>
                       </div>

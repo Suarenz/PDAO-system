@@ -353,6 +353,10 @@ class AuthController extends Controller
                 'remarks' => $application->review_notes,
                 'date_approved' => $profile->date_approved?->format('Y-m-d'),
                 'expiry_date' => $profile->expiry_date?->format('Y-m-d'),
+                'profile_id' => $profile->id,
+                'photo_url' => $application->photo_path
+                    ? asset('storage/' . $application->photo_path)
+                    : null,
             ],
         ]);
     }

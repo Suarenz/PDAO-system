@@ -3,6 +3,12 @@
 .env.*
 !.env.example
 
+# Database files
+pdao_db.sql
+*.sql
+server/database/*.sqlite
+server/storage/app/backups/*.sql
+
 # Logs
 logs
 *.log

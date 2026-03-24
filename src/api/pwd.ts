@@ -209,6 +209,20 @@ export const pwdApi = {
   },
 
   /**
+   * Upload 1x1 applicant photo for the pending registration linked to a PWD profile.
+   */
+  uploadPhoto: async (profileId: number, photo: File): Promise<{ photo_url: string }> => {
+    const formData = new FormData();
+    formData.append('photo', photo);
+    const response = await api.post<{ success: boolean; data: { photo_url: string } }>(
+      `/pwd/${profileId}/upload-photo`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data.data;
+  },
+
+  /**
    * Mark PWD ID card as printed (notifies the user)
    */
   markAsPrinted: async (id: number): Promise<any> => {

@@ -17,6 +17,7 @@ use App\Models\PwdOrganization;
 use App\Models\PwdPersonalInfo;
 use App\Models\PwdProfile;
 use App\Models\PwdProfileVersion;
+use App\Support\EncodingRepair;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -113,9 +114,7 @@ class MigrateLegacyData extends Command
             // Check required tables exist
             $requiredTables = ['pwd_table', 'account_table', 'history_log'];
             foreach ($requiredTables as $table) {
-                $exists = DB::connection('legacy')
-                    ->select("SHOW TABLES LIKE ?", [$table]);
-                if (empty($exists)) {
+                    if (!Schema::connection('legacy')->hasTable($table)) {
                     $this->error("✗ Required table '{$table}' not found in legacy database");
                     return false;
                 }
@@ -145,6 +144,18 @@ class MigrateLegacyData extends Command
             // Add common variations
             $normalized = $this->normalizeBarangay($barangay->name);
             $this->barangayMap[$normalized] = $barangay->id;
+        }
+        // Legacy used "Barangay I/II" instead of "Poblacion I/II", and Biñan had encoding issues
+        $barangayAliases = [
+            'barangay i' => 'poblacion i',
+            'barangay ii' => 'poblacion ii',
+            'binan' => 'biñan',
+        ];
+        foreach ($barangayAliases as $alias => $canonical) {
+            $canonicalLower = strtolower($canonical);
+            if (isset($this->barangayMap[$canonicalLower])) {
+                $this->barangayMap[$alias] = $this->barangayMap[$canonicalLower];
+            }
         }
         $this->info("  Loaded {$barangays->count()} barangays");
 
@@ -183,10 +194,11 @@ class MigrateLegacyData extends Command
                 $userData = $this->mapUserData($legacyUser);
                 
                 if (!$isDryRun) {
-                    $user = User::updateOrCreate(
-                        ['email' => $userData['email']],
-                        $userData
-                    );
+                    $lookup = !empty($userData['id_number'])
+                        ? ['id_number' => $userData['id_number']]
+                        : ['username' => $userData['username']];
+
+                    $user = User::updateOrCreate($lookup, $userData);
                     $this->userMap[$legacyUser->account_id] = $user->id;
                 } else {
                     // In dry-run, just store the legacy ID
@@ -222,16 +234,16 @@ class MigrateLegacyData extends Command
 
         $role = $roleMap[strtolower($legacy->user_type ?? 'user')] ?? 'USER';
 
-        // Generate email if not exists
-        $email = $legacy->email ?? null;
-        if (!$email) {
-            $email = strtolower($legacy->firstname . '.' . $legacy->lastname) . '@pdao.local';
-        }
+        $idNumber = trim((string) ($legacy->id_number ?? ''));
+        $username = $idNumber !== ''
+            ? $idNumber
+            : strtolower(trim(($legacy->firstname ?? 'user') . '.' . ($legacy->lastname ?? $legacy->account_id)));
 
         return [
+            'id_number' => $idNumber !== '' ? $idNumber : null,
+            'username' => $username,
             'first_name' => $legacy->firstname ?? 'Unknown',
             'last_name' => $legacy->lastname ?? 'User',
-            'email' => $email,
             'password' => $legacy->password, // Keep existing bcrypt hash
             'role' => $role,
             'status' => strtoupper($legacy->status ?? 'active') === 'APPROVED' ? 'ACTIVE' : 'INACTIVE',
@@ -286,10 +298,10 @@ class MigrateLegacyData extends Command
         // Create main profile
         $profile = PwdProfile::create([
             'pwd_number' => $legacy->pwd_number ?: null,
-            'first_name' => $legacy->pwd_firstname ?? 'Unknown',
-            'last_name' => $legacy->pwd_lastname ?? 'Unknown',
-            'middle_name' => $legacy->pwd_middlename ?: null,
-            'suffix' => $legacy->pwd_suffix ?: null,
+            'first_name' => $this->normalizeLegacyName($legacy->pwd_firstname) ?? 'Unknown',
+            'last_name' => $this->normalizeLegacyName($legacy->pwd_lastname) ?? 'Unknown',
+            'middle_name' => $this->normalizeLegacyName($legacy->pwd_middlename ?: null),
+            'suffix' => $this->normalizeLegacyName($legacy->pwd_suffix ?: null),
             'date_applied' => $this->parseDate($legacy->date_applied),
             'status' => 'ACTIVE',
             'current_version' => 1,
@@ -605,11 +617,24 @@ class MigrateLegacyData extends Command
         return strtolower(trim(str_replace(['.', ','], '', $name)));
     }
 
+    protected function normalizeLegacyName(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+
+        return EncodingRepair::repairName($value);
+    }
+
     protected function findBarangayId(?string $name): ?int
     {
         if (!$name) return null;
         $normalized = $this->normalizeBarangay($name);
-        return $this->barangayMap[$normalized] ?? null;
+        // Try direct match, then strip non-ASCII chars for encoding-damaged names (e.g. Biñan)
+        return $this->barangayMap[$normalized]
+            ?? $this->barangayMap[strtolower(trim($name))]
+            ?? $this->barangayMap[preg_replace('/[^\x20-\x7E]/', '', $normalized)]
+            ?? null;
     }
 
     protected function getDisabilityVariations(string $name): array
@@ -619,17 +644,15 @@ class MigrateLegacyData extends Command
         // Add common variations
         $variationMap = [
             'Deaf or Hard of Hearing' => ['deaf', 'hard of hearing', 'hearing impaired', 'hearing'],
-            'Physical' => ['physical disability', 'physical impairment'],
-            'Visual' => ['visual impairment', 'blind', 'visually impaired', 'vision'],
-            'Mental' => ['mental disability', 'mental health'],
-            'Intellectual' => ['intellectual disability'],
-            'Orthopedic' => ['orthopedic disability', 'ortho'],
-            'Psychosocial' => ['psychosocial disability'],
-            'Learning' => ['learning disability'],
-            'Speech/Language' => ['speech', 'language', 'speech impairment'],
-            'Chronic Illness' => ['chronic', 'chronic disease'],
-            'Cancer' => ['cancer'],
-            'Rare Disease' => ['rare disease', 'rare'],
+            'Physical Disability' => ['physical disability', 'physical impairment', 'physical', 'orthopedic disability', 'orthopedic', 'ortho'],
+            'Visual Disability' => ['visual impairment', 'blind', 'visually impaired', 'vision', 'visual'],
+            'Mental Disability' => ['mental disability', 'mental health', 'mental'],
+            'Intellectual Disability' => ['intellectual disability', 'intellectual'],
+            'Psychosocial Disability' => ['psychosocial disability', 'psychosocial'],
+            'Learning Disability' => ['learning disability', 'learning'],
+            'Speech & Language Impairment' => ['speech', 'language', 'speech impairment', 'speech/language', 'speech and language impairment'],
+            'Cancer (RA 11215)' => ['cancer', 'chronic', 'chronic disease', 'chronic illness', 'cancer (ra11215)'],
+            'Rare Disease (RA 10747)' => ['rare disease', 'rare', 'rare disease (ra10747)'],
         ];
 
         if (isset($variationMap[$name])) {

@@ -32,7 +32,9 @@ import {
   IdCard,
   Building2,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  Download,
+  Camera,
 } from 'lucide-react';
 import { approvalApi } from '../api/approvals';
 import type { PendingApproval } from '../api/client';
@@ -104,6 +106,23 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
       setViewModalOpen(false);
     } finally {
       setModalLoading(false);
+    }
+  };
+
+  const handleDownloadPhoto = async (approvalId: number, filename: string) => {
+    try {
+      const blob = await approvalApi.downloadPhoto(approvalId);
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download failed:', err);
+      showAlert('Download Failed', 'Could not download the photo. Please try again.', 'error');
     }
   };
 
@@ -442,7 +461,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[8px]" onClick={() => { setViewModalOpen(false); setSelectedApproval(null); }} />
           <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-300 z-[10000]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-200 dark:border-slate-800 gap-3">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-xl flex items-center justify-center">
                   <User size={24} className="text-slate-700 dark:text-slate-300" />
@@ -462,14 +481,14 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
             </div>
 
             {/* Modal Content */}
-            <div className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <div className="p-4 sm:p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
               {modalLoading ? (
                 <div className="space-y-8">
                   <div className="bg-white/5 dark:bg-slate-800/10 rounded-2xl p-6 border border-white/10 dark:border-slate-700/20 shadow-sm backdrop-blur-md">
                     <div className="flex items-center gap-3 mb-6">
                       <Skeleton className="h-6 w-32" />
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                       {[1, 2, 3, 4, 5, 6].map(i => (
                         <div key={i}>
                           <Skeleton className="h-3 w-20 mb-2" />
@@ -485,13 +504,42 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
                 </div>
               ) : selectedApproval?.pwd_profile && (
                 <div className="space-y-8">
+                  {/* Applicant 1x1 Photo */}
+                  {selectedApproval?.photo_url && (
+                    <div className="bg-white/5 dark:bg-slate-800/10 rounded-2xl p-6 border border-white/10 dark:border-slate-700/20 shadow-sm backdrop-blur-md">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Camera className="text-indigo-500" size={20} />
+                        <h4 className="text-lg font-bold text-slate-900 dark:text-white">Applicant 1×1 Photo</h4>
+                      </div>
+                      <div className="flex items-start gap-6">
+                        <img
+                          src={selectedApproval.photo_url}
+                          alt="Applicant 1x1 photo"
+                          className="w-28 h-28 object-cover rounded-xl border-2 border-slate-200 dark:border-slate-700 shadow"
+                        />
+                        <div className="flex flex-col gap-3 justify-center">
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            This photo was submitted by the applicant for use in the PWD ID card.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadPhoto(selectedApproval.id, `photo_REG-${selectedApproval.id}.jpg`)}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm w-fit"
+                          >
+                            <Download size={14} /> Download Photo
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Basic Info */}
                   <div className="bg-white/5 dark:bg-slate-800/10 rounded-2xl p-6 border border-white/10 dark:border-slate-700/20 shadow-sm backdrop-blur-md">
                     <div className="flex items-center gap-3 mb-4">
                       <User className="text-blue-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Personal Information</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Full Name</p>
                         <p className="font-semibold text-slate-900 dark:text-white">{selectedApproval.pwd_profile.first_name} {selectedApproval.pwd_profile.middle_name || ''} {selectedApproval.pwd_profile.last_name} {selectedApproval.pwd_profile.suffix || ''}</p>
@@ -578,7 +626,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
                       <Home className="text-orange-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Address</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">House/Street</p>
                         <p className="font-semibold text-slate-900 dark:text-white">{selectedApproval.pwd_profile.address?.house_street || 'N/A'}</p>
@@ -693,7 +741,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
                         <CreditCard className="text-teal-600" size={20} />
                         <h4 className="text-lg font-bold text-slate-900 dark:text-white">Government IDs</h4>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                         {selectedApproval.pwd_profile.government_ids.map((g: any, idx: number) => (
                           <div key={idx} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                             <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{g.id_type}</p>
@@ -711,7 +759,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
                         <Building2 className="text-amber-600" size={20} />
                         <h4 className="text-lg font-bold text-slate-900 dark:text-white">Household Information</h4>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Living Arrangement</p>
                           <p className="font-semibold text-slate-900 dark:text-white">{selectedApproval.pwd_profile.household_info.living_arrangement || 'N/A'}</p>
@@ -735,7 +783,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ onModalStateChange }) => 
                         <Building2 className="text-indigo-600" size={20} />
                         <h4 className="text-lg font-bold text-slate-900 dark:text-white">Organization Affiliation</h4>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Organization Name</p>
                           <p className="font-semibold text-slate-900 dark:text-white">{selectedApproval.pwd_profile.organization.organization_name}</p>

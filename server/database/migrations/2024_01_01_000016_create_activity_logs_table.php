@@ -32,8 +32,8 @@ return new class extends Migration
             ]);
             $table->string('model_type')->nullable(); // e.g., 'PwdProfile', 'User'
             $table->unsignedBigInteger('model_id')->nullable();
-            $table->json('old_values')->nullable();
-            $table->json('new_values')->nullable();
+            $table->longText('old_values')->nullable();
+            $table->longText('new_values')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->text('description')->nullable();

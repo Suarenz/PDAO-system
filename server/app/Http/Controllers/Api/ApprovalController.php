@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PendingRegistration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ApprovalController extends Controller
@@ -112,6 +113,9 @@ class ApprovalController extends Controller
                 'reviewed_by' => $approval->reviewer?->full_name,
                 'reviewed_at' => $approval->reviewed_at,
                 'review_notes' => $approval->review_notes,
+                'photo_url' => $approval->photo_path
+                    ? asset('storage/' . $approval->photo_path)
+                    : null,
                 'pwd_profile' => $approval->pwdProfile,
             ],
         ]);

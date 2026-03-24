@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Skeleton from './components/Skeleton';
 import { LayoutDashboard } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -31,6 +31,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [currentView, setCurrentView] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPwdIdToView, setSelectedPwdIdToView] = useState<number | null>(null);
 
   // Set initial view based on role
   useEffect(() => {
@@ -48,6 +49,13 @@ const App: React.FC = () => {
       }
     }
   }, [isAuthenticated, user?.role]);
+
+  // Reset PWD selection when navigating away from list-pwd view
+  useEffect(() => {
+    if (currentView !== 'list-pwd') {
+      setSelectedPwdIdToView(null);
+    }
+  }, [currentView]);
 
   const handleLogin = (userProfile: UserProfile) => {
     // Redirection is now handled by the useEffect above when the auth context updates
@@ -87,6 +95,12 @@ const App: React.FC = () => {
     }
   };
 
+  // Handler to view PWD details from Recently Added Records
+  const handleViewPwdDetails = useCallback((pwdId: number) => {
+    setSelectedPwdIdToView(pwdId);
+    setCurrentView('list-pwd');
+  }, []);
+
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
@@ -96,9 +110,9 @@ const App: React.FC = () => {
       case 'register-pwd':
         return <NewApplicantForm onCancel={() => setCurrentView('add-pwd')} isUserRegistration={true} />;
       case 'add-pwd':
-        return <AddPwd userRole={user?.role} />;
+        return <AddPwd userRole={user?.role} onViewPwdDetails={handleViewPwdDetails} />;
       case 'list-pwd':
-        return <ListPwd onModalStateChange={setIsModalOpen} />;
+        return <ListPwd onModalStateChange={setIsModalOpen} initialPwdIdToView={selectedPwdIdToView} />;
       case 'approval-queue':
         return <ApprovalQueue onModalStateChange={setIsModalOpen} />;
       case 'account':

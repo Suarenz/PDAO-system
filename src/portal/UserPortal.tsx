@@ -182,7 +182,7 @@ const UserPortal: React.FC<UserPortalProps> = ({ userId, userName, userEmail, us
     dateOfBirth: '1990-05-15',
     sex: 'Male',
     address: 'Brgy. Poblacion I, Pagsanjan, Laguna',
-    disabilityType: 'Physical Disability (Orthopedic)',
+    disabilityType: 'Physical Disability',
     bloodType: 'O+',
     dateIssued: '2026-01-20',
     expiryDate: '2029-01-20',

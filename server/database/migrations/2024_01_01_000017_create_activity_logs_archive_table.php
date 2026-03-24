@@ -20,8 +20,8 @@ return new class extends Migration
             $table->string('action_type');
             $table->string('model_type')->nullable();
             $table->unsignedBigInteger('model_id')->nullable();
-            $table->json('old_values')->nullable();
-            $table->json('new_values')->nullable();
+            $table->longText('old_values')->nullable();
+            $table->longText('new_values')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->text('description')->nullable();

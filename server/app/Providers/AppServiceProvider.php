@@ -9,6 +9,7 @@ use App\Models\PwdProfile;
 use App\Models\User;
 use App\Observers\AuditObserver;
 use App\Observers\VersionObserver;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -26,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        mb_internal_encoding('UTF-8');
+
+        Schema::defaultStringLength(191);
+
         // Register Audit Observer for models that need activity logging
         User::observe(AuditObserver::class);
         PwdProfile::observe(AuditObserver::class);

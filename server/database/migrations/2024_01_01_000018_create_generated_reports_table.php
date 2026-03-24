@@ -25,7 +25,7 @@ return new class extends Migration
                 'CUSTOM'
             ]);
             $table->string('size')->nullable();
-            $table->json('parameters')->nullable(); // Filters/params used to generate
+            $table->longText('parameters')->nullable(); // Filters/params used to generate
             $table->foreignId('generated_by')->constrained('users')->onDelete('cascade');
             $table->timestamps();
 

@@ -208,6 +208,20 @@ const Reports: React.FC = () => {
     }
   }, [quarterlyYear]);
 
+  const refreshActiveReport = useCallback(async () => {
+    if (activeTab === 'stats') {
+      await fetchStatsData();
+      return;
+    }
+
+    if (activeTab === 'youth') {
+      await fetchYouthData();
+      return;
+    }
+
+    await fetchQuarterlyData();
+  }, [activeTab, fetchQuarterlyData, fetchStatsData, fetchYouthData]);
+
   // Fetch initial report data (History + Initial Tab)
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -257,6 +271,25 @@ const Reports: React.FC = () => {
       setYouthYear(new Date(youthAsOfDate).getFullYear().toString());
     }
   }, [youthAsOfDate]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const refreshVisibleReport = () => {
+      if (document.hidden) return;
+      refreshActiveReport();
+    };
+
+    const intervalId = window.setInterval(refreshVisibleReport, 30000);
+    window.addEventListener('focus', refreshVisibleReport);
+    document.addEventListener('visibilitychange', refreshVisibleReport);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshVisibleReport);
+      document.removeEventListener('visibilitychange', refreshVisibleReport);
+    };
+  }, [loading, refreshActiveReport]);
 
   const handleExport = async (type: 'copy' | 'csv' | 'excel' | 'pdf' | 'print') => {
     const reportTypeMap: Record<string, string> = {

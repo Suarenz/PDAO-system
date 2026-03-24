@@ -52,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/pwd/{pwd}/status', [PwdController::class, 'updateStatus']);
     Route::patch('/pwd/{pwd}/mark-printed', [PwdController::class, 'markAsPrinted']);
     Route::post('/pwd/{pwd}/generate-number', [PwdController::class, 'generateNumber']);
+    Route::post('/pwd/{pwd}/upload-photo', [PwdController::class, 'uploadPhoto']);
     Route::get('/pwd/{pwd}/versions', [PwdController::class, 'versions']);
     Route::post('/pwd/{pwd}/restore-version/{versionNumber}', [PwdController::class, 'restoreVersion'])
         ->middleware('admin');
@@ -64,6 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{approval}/approve', [ApprovalController::class, 'approve']);
         Route::post('/{approval}/reject', [ApprovalController::class, 'reject']);
         Route::post('/{approval}/mark-review', [ApprovalController::class, 'markForReview']);
+        Route::get('/{approval}/download-photo', [PwdController::class, 'downloadPhoto'])->middleware('admin');
     });
 
     // Activity Logs

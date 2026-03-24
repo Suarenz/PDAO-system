@@ -15,9 +15,9 @@ class DisabilityTypeSeeder extends Seeder
     {
         $disabilityTypes = [
             [
-                'name' => 'Cancer',
+                'name' => 'Cancer (RA 11215)',
                 'code' => 'CAN',
-                'description' => 'Disability due to cancer or its treatment effects',
+                'description' => 'Disability due to cancer or its treatment effects (Republic Act 11215)',
             ],
             [
                 'name' => 'Deaf or Hard of Hearing',
@@ -25,54 +25,44 @@ class DisabilityTypeSeeder extends Seeder
                 'description' => 'Hearing impairment or deafness',
             ],
             [
-                'name' => 'Intellectual',
+                'name' => 'Intellectual Disability',
                 'code' => 'INT',
                 'description' => 'Intellectual disability affecting cognitive functions',
             ],
             [
-                'name' => 'Learning',
+                'name' => 'Learning Disability',
                 'code' => 'LRN',
                 'description' => 'Learning disabilities such as dyslexia, dyscalculia',
             ],
             [
-                'name' => 'Mental',
+                'name' => 'Mental Disability',
                 'code' => 'MEN',
                 'description' => 'Mental health conditions affecting daily functioning',
             ],
             [
-                'name' => 'Orthopedic',
-                'code' => 'ORT',
-                'description' => 'Bone, joint, or muscle disorders',
-            ],
-            [
-                'name' => 'Physical',
+                'name' => 'Physical Disability',
                 'code' => 'PHY',
                 'description' => 'Physical disabilities affecting mobility or motor functions',
             ],
             [
-                'name' => 'Psychosocial',
+                'name' => 'Psychosocial Disability',
                 'code' => 'PSY',
                 'description' => 'Psychosocial disabilities affecting social interactions',
             ],
             [
-                'name' => 'Rare Disease',
+                'name' => 'Rare Disease (RA 10747)',
                 'code' => 'RAR',
-                'description' => 'Rare diseases causing disability',
+                'description' => 'Rare diseases causing disability (Republic Act 10747)',
             ],
             [
-                'name' => 'Speech/Language',
+                'name' => 'Speech & Language Impairment',
                 'code' => 'SPL',
                 'description' => 'Speech or language impairments',
             ],
             [
-                'name' => 'Visual',
+                'name' => 'Visual Disability',
                 'code' => 'VIS',
                 'description' => 'Visual impairment or blindness',
-            ],
-            [
-                'name' => 'Chronic Illness',
-                'code' => 'CHR',
-                'description' => 'Chronic illnesses causing long-term disability',
             ],
             [
                 'name' => 'Other',

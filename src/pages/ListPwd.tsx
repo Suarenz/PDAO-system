@@ -56,11 +56,13 @@ interface PwdRecord {
 
 interface ListPwdProps {
   onModalStateChange?: (isOpen: boolean) => void;
+  initialPwdIdToView?: number | null;
 }
 
-const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
+const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange, initialPwdIdToView }) => {
   const [records, setRecords] = useState<PwdRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPageTransitioning, setIsPageTransitioning] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBarangay, setSelectedBarangay] = useState('All Barangays');
   const [activeTab, setActiveTab] = useState<'all' | 'with-id' | 'without-id' | 'children' | 'deceased' | 'applied-online'>('all');
@@ -71,7 +73,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
     currentPage: 1,
     lastPage: 1,
     total: 0,
-    perPage: 20
+    perPage: 10
   });
   const [counts, setCounts] = useState({
     all: 0,
@@ -98,13 +100,23 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [lookups, setLookups] = useState<Lookups | null>(null);
+  const hasFetchedRecordsRef = useRef(false);
+  const latestRecordsRequestRef = useRef(0);
+  const hasInitializedSearchRef = useRef(false);
 
   // Sync modal state with parent to hide navigation
   useEffect(() => {
-    const isAnyModalOpen = viewModalOpen || editModalOpen || deleteModalOpen || 
+    const isAnyModalOpen = viewModalOpen || editModalOpen || deleteModalOpen ||
                            deceasedModalOpen || printedModalOpen || generateIdModalOpen || successModalOpen;
     onModalStateChange?.(isAnyModalOpen);
   }, [viewModalOpen, editModalOpen, deleteModalOpen, deceasedModalOpen, printedModalOpen, generateIdModalOpen, successModalOpen, onModalStateChange]);
+
+  // Auto-open view modal for initially selected PWD
+  useEffect(() => {
+    if (initialPwdIdToView) {
+      handleView(initialPwdIdToView.toString());
+    }
+  }, [initialPwdIdToView]);
   
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -167,8 +179,16 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
   });
 
   // Fetch records from API
-  const fetchRecords = async () => {
-    setIsLoading(true);
+  const fetchRecords = useCallback(async (options?: { preserveRows?: boolean }) => {
+    const preserveRows = options?.preserveRows ?? hasFetchedRecordsRef.current;
+    const requestId = ++latestRecordsRequestRef.current;
+
+    if (preserveRows) {
+      setIsPageTransitioning(true);
+    } else {
+      setIsLoading(true);
+    }
+
     try {
       const params: Record<string, any> = {
         page: pagination.currentPage,
@@ -186,6 +206,10 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
       if (activeTab === 'applied-online') params.applied_online = true;
       
       const response = await pwdApi.getAll(params);
+
+      if (requestId !== latestRecordsRequestRef.current) {
+        return;
+      }
       
       // Transform API response to local format
       const transformedRecords: PwdRecord[] = response.data.map((pwd: any) => {
@@ -223,11 +247,12 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
       });
       
       setRecords(transformedRecords);
+      hasFetchedRecordsRef.current = true;
       setPagination({
         currentPage: response.meta?.current_page || 1,
         lastPage: response.meta?.last_page || 1,
         total: response.meta?.total || 0,
-        perPage: response.meta?.per_page || 20
+        perPage: response.meta?.per_page || 10
       });
 
       // Update counts
@@ -240,11 +265,17 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
         appliedOnline: response.counts?.applied_online || 0
       });
     } catch (err) {
+      if (requestId !== latestRecordsRequestRef.current) {
+        return;
+      }
       console.error('Failed to fetch PWD records:', err);
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRecordsRequestRef.current) {
+        setIsLoading(false);
+        setIsPageTransitioning(false);
+      }
     }
-  };
+  }, [activeTab, pagination.currentPage, pagination.perPage, searchTerm, selectedBarangay]);
 
   // Helper to calculate age from birthdate
   const calculateAge = (birthDate: string) => {
@@ -259,16 +290,41 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
     return age;
   };
 
+  const formatLongDate = (value?: string | null) => {
+    if (!value) return 'N/A';
+    return new Date(value).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return 'N/A';
+    return new Date(value).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
+  const formatCurrency = (value?: number | null) => {
+    if (value === null || value === undefined) return 'N/A';
+    return `₱${value.toLocaleString()}`;
+  };
+
+  const formatBoolean = (value?: boolean | null) => {
+    if (value === null || value === undefined) return 'N/A';
+    return value ? 'Yes' : 'No';
+  };
+
   // Helper for avatar colors
   const getAvatarColor = (id: number) => {
     const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899'];
     return colors[id % colors.length];
   };
-
-  useEffect(() => {
-    fetchRecords();
-    fetchLookups();
-  }, [pagination.currentPage, selectedBarangay, activeTab]);
 
   // Fetch lookups for edit form
   const fetchLookups = async () => {
@@ -280,11 +336,24 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
     }
   };
 
+  useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
+
+  useEffect(() => {
+    fetchLookups();
+  }, []);
+
   // Debounced search
   useEffect(() => {
+    if (!hasInitializedSearchRef.current) {
+      hasInitializedSearchRef.current = true;
+      return;
+    }
+
     const timer = setTimeout(() => {
       if (pagination.currentPage === 1) {
-        fetchRecords();
+        fetchRecords({ preserveRows: true });
       } else {
         setPagination(prev => ({ ...prev, currentPage: 1 }));
       }
@@ -507,7 +576,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           disability_type_id: editForm.disability_type_id,
           cause: editForm.disability_cause as 'Acquired' | 'Congenital' | null,
           cause_details: editForm.disability_details || null
-        }] : undefined,
+        }] : [],
         employment: {
           status: editForm.employment_status || null,
           category: editForm.employment_category || null,
@@ -528,15 +597,15 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           address: editForm.org_address || null,
           telephone: editForm.org_telephone || null
         },
-        family: familyMembers.length > 0 ? familyMembers : undefined,
-        government_ids: governmentIds.length > 0 ? governmentIds : undefined
+        family: familyMembers,
+        government_ids: governmentIds
       });
       setEditModalOpen(false);
       setSelectedPwd(null);
+      await fetchRecords({ preserveRows: true });
       setSuccessTitle('Success!');
       setSuccessMessage('Record has been updated successfully!');
       setSuccessModalOpen(true);
-      fetchRecords();
     } catch (err: any) {
       console.error('Failed to update record:', err);
       setEditModalOpen(false);
@@ -636,7 +705,11 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
   };
 
   const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= pagination.lastPage) {
+    if (isLoading || isPageTransitioning) {
+      return;
+    }
+
+    if (page >= 1 && page <= pagination.lastPage && page !== pagination.currentPage) {
       setPagination(prev => ({ ...prev, currentPage: page }));
     }
   };
@@ -732,7 +805,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           </div>
           <input 
             type="text" 
-            placeholder="Search by ID or Name..."
+            placeholder="Search by ID, first name, middle name, last name, or suffix..."
             className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl pl-12 pr-4 py-4 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -745,7 +818,11 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           </div>
           <select 
             value={selectedBarangay}
-            onChange={(e) => setSelectedBarangay(e.target.value)}
+            onChange={(e) => {
+              const nextBarangay = e.target.value;
+              setSelectedBarangay(nextBarangay);
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
             className="w-full md:w-64 appearance-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl pl-12 pr-10 py-4 text-sm font-semibold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm cursor-pointer"
           >
             {BARANGAY_OPTIONS.map(opt => (
@@ -759,53 +836,71 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
       </div>
 
       {/* View Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-slate-200/50 dark:bg-slate-900/50 rounded-2xl w-full md:w-fit border border-slate-200 dark:border-slate-800">
+      <div className="flex items-center gap-1 p-1 bg-slate-200/50 dark:bg-slate-900/50 rounded-2xl w-full border border-slate-200 dark:border-slate-800 overflow-x-auto">
         <button 
-            onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'all' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            onClick={() => {
+              setActiveTab('all');
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'all' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
             <Users size={16} />
-            All Members
+            <span className="whitespace-nowrap">All Members</span>
             <span className="ml-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-[10px]">{counts.all}</span>
         </button>
         <button 
-            onClick={() => setActiveTab('with-id')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'with-id' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            onClick={() => {
+              setActiveTab('with-id');
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'with-id' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
             <UserCheck size={16} />
-            With ID Number
+            <span className="whitespace-nowrap">With ID</span>
             <span className="ml-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-[10px]">{counts.withId}</span>
         </button>
         <button 
-            onClick={() => setActiveTab('without-id')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'without-id' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            onClick={() => {
+              setActiveTab('without-id');
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'without-id' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
             <UserMinus size={16} />
-            Without ID Number
+            <span className="whitespace-nowrap">Without ID</span>
             <span className="ml-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-[10px]">{counts.withoutId}</span>
         </button>
         <button 
-            onClick={() => setActiveTab('children')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'children' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            onClick={() => {
+              setActiveTab('children');
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'children' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
             <Users size={16} />
-            Children with Disability
+            <span className="whitespace-nowrap">Children</span>
             <span className="ml-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-[10px]">{counts.children}</span>
         </button>
         <button 
-            onClick={() => setActiveTab('deceased')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'deceased' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            onClick={() => {
+              setActiveTab('deceased');
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'deceased' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
             <UserCheck size={16} />
-            Deceased
+            <span className="whitespace-nowrap">Deceased</span>
             <span className="ml-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-[10px]">{counts.deceased}</span>
         </button>
         <button 
-            onClick={() => setActiveTab('applied-online')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'applied-online' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            onClick={() => {
+              setActiveTab('applied-online');
+              setPagination(prev => prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 });
+            }}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'applied-online' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
             <CreditCard size={16} />
-            Applied Online
+            <span className="whitespace-nowrap">Applied Online</span>
             <span className="ml-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-[10px]">{counts.appliedOnline}</span>
         </button>
       </div>
@@ -823,7 +918,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                   <th className="px-8 py-6 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+              <tbody className={`divide-y divide-slate-50 dark:divide-slate-800/50 transition-opacity ${isPageTransitioning ? 'opacity-60' : 'opacity-100'}`}>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
@@ -966,19 +1061,20 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
            <div className="flex gap-2 items-center">
               <button 
                 onClick={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={pagination.currentPage === 1}
-                className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 disabled:opacity-50 font-bold flex items-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                disabled={pagination.currentPage === 1 || isLoading || isPageTransitioning}
+                className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed font-bold flex items-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               >
                 <ChevronLeft size={14} />
                 Previous
               </button>
-              <span className="px-3 py-2 text-slate-700 dark:text-slate-300 font-bold">
+              <span className="px-3 py-2 text-slate-700 dark:text-slate-300 font-bold inline-flex items-center gap-2">
                 Page {pagination.currentPage} of {pagination.lastPage}
+                {isPageTransitioning && <Loader2 size={14} className="animate-spin text-indigo-500" />}
               </span>
               <button 
                 onClick={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={pagination.currentPage === pagination.lastPage}
-                className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 disabled:opacity-50 font-bold flex items-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                disabled={pagination.currentPage === pagination.lastPage || isLoading || isPageTransitioning}
+                className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed font-bold flex items-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               >
                 Next
                 <ChevronRight size={14} />
@@ -1056,7 +1152,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[8px]" onClick={() => { setViewModalOpen(false); setSelectedPwd(null); onModalStateChange?.(false); }} />
           <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-300 z-[10000]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 gap-3">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-xl flex items-center justify-center">
                   <User size={24} className="text-slate-700 dark:text-slate-300" />
@@ -1075,7 +1171,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
             </div>
 
             {/* Modal Content */}
-            <div className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <div className="p-4 sm:p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
               {modalLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
@@ -1089,7 +1185,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <User className="text-blue-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Personal Information</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Full Name</p>
                         <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.first_name} {selectedPwd.middle_name || ''} {selectedPwd.last_name} {selectedPwd.suffix || ''}</p>
@@ -1115,11 +1211,15 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       </div>
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Date Applied</p>
-                        <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.date_applied ? new Date(selectedPwd.date_applied).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white">{formatLongDate(selectedPwd.date_applied)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Birth Date</p>
-                        <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.personal_info?.birth_date ? new Date(selectedPwd.personal_info.birth_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white">{formatLongDate(selectedPwd.personal_info?.birth_date)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Birth Place</p>
+                        <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.personal_info?.birth_place || 'N/A'}</p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Sex</p>
@@ -1180,7 +1280,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <Home className="text-orange-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Address</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">House/Street</p>
                         <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.address?.house_street || 'N/A'}</p>
@@ -1211,11 +1311,32 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Disability Information</h4>
                     </div>
                     {selectedPwd.disabilities && selectedPwd.disabilities.length > 0 ? (
-                      <div className="flex flex-wrap gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {selectedPwd.disabilities.map((d, idx) => (
-                          <span key={idx} className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-bold">
-                            {d.disability_type_name === 'Other' && d.cause_details ? d.cause_details : d.disability_type_name}
-                          </span>
+                          <div key={idx} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-semibold text-slate-900 dark:text-white">
+                                {d.disability_type_name === 'Other' && d.cause_details ? d.cause_details : d.disability_type_name}
+                              </p>
+                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
+                                d.is_primary
+                                  ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              }`}>
+                                {d.is_primary ? 'Primary' : 'Additional'}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Cause</p>
+                                <p className="font-semibold text-slate-900 dark:text-white">{d.cause || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Details</p>
+                                <p className="font-semibold text-slate-900 dark:text-white">{d.cause_details || 'N/A'}</p>
+                              </div>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -1238,6 +1359,10 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Category</p>
                           <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.employment?.category || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Type</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.employment?.type || 'N/A'}</p>
                         </div>
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Occupation</p>
@@ -1284,7 +1409,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                         <CreditCard className="text-teal-600" size={20} />
                         <h4 className="text-lg font-bold text-slate-900 dark:text-white">Government IDs</h4>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                         {selectedPwd.government_ids.map((g, idx) => (
                           <div key={idx} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                             <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{g.id_type}</p>
@@ -1302,10 +1427,26 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                         <Building2 className="text-amber-600" size={20} />
                         <h4 className="text-lg font-bold text-slate-900 dark:text-white">Household Information</h4>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Living Arrangement</p>
                           <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.household_info.living_arrangement || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Receiving Support</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{formatBoolean(selectedPwd.household_info.receiving_support)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pensioner</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{formatBoolean(selectedPwd.household_info.is_pensioner)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pension Type</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.household_info.pension_type || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Monthly Pension</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{formatCurrency(selectedPwd.household_info.monthly_pension)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Income Source</p>
@@ -1313,7 +1454,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                         </div>
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Monthly Income</p>
-                          <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.household_info.monthly_income ? `₱${selectedPwd.household_info.monthly_income.toLocaleString()}` : 'N/A'}</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{formatCurrency(selectedPwd.household_info.monthly_income)}</p>
                         </div>
                       </div>
                     </div>
@@ -1326,7 +1467,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                         <Building2 className="text-indigo-600" size={20} />
                         <h4 className="text-lg font-bold text-slate-900 dark:text-white">Organization Affiliation</h4>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Organization Name</p>
                           <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.organization.organization_name}</p>
@@ -1353,7 +1494,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <Calendar className="text-slate-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Record Information</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       <div className="col-span-2 md:col-span-3">
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Accessibility Needs</p>
                         <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.accessibility_needs || 'N/A'}</p>
@@ -1368,11 +1509,15 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       </div>
                       <div className="mt-4">
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Date Applied</p>
-                        <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.date_applied ? new Date(selectedPwd.date_applied).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white">{formatLongDate(selectedPwd.date_applied)}</p>
                       </div>
                       <div className="mt-4">
                         <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Record Created</p>
-                        <p className="font-semibold text-slate-900 dark:text-white">{selectedPwd.created_at ? new Date(selectedPwd.created_at).toLocaleDateString() : 'N/A'}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white">{formatDateTime(selectedPwd.created_at)}</p>
+                      </div>
+                      <div className="mt-4">
+                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Last Updated</p>
+                        <p className="font-semibold text-slate-900 dark:text-white">{formatDateTime(selectedPwd.updated_at)}</p>
                       </div>
                     </div>
                   </div>
@@ -1390,7 +1535,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[8px]" onClick={() => { setEditModalOpen(false); setSelectedPwd(null); onModalStateChange?.(false); }} />
           <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-300 z-[10000]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 gap-3">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
                   <Edit3 size={24} className="text-purple-600 dark:text-purple-400" />
@@ -1409,7 +1554,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
             </div>
 
             {/* Modal Content */}
-            <div className="p-8 overflow-y-auto max-h-[calc(90vh-180px)]">
+            <div className="p-4 sm:p-8 overflow-y-auto max-h-[calc(90vh-180px)]">
               {modalLoading && !selectedPwd ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="w-10 h-10 animate-spin text-purple-600" />
@@ -1423,7 +1568,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <User className="text-blue-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Personal Information</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="md:col-span-4">
                         <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Assigned ID Number</label>
                         <input type="text" value={editForm.pwd_number} onChange={(e) => setEditForm({...editForm, pwd_number: e.target.value})}
@@ -1512,7 +1657,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <Phone className="text-green-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Contact Information</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Mobile</label>
                         <input type="text" value={editForm.mobile} onChange={(e) => setEditForm({...editForm, mobile: e.target.value})}
@@ -1542,7 +1687,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <Home className="text-orange-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Address</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       <div className="md:col-span-2">
                         <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">House/Street</label>
                         <input type="text" value={editForm.house_street} onChange={(e) => setEditForm({...editForm, house_street: e.target.value})}
@@ -1580,16 +1725,17 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <Heart className="text-red-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Disability Information</h4>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Disability Type</label>
                         <select value={editForm.disability_type_id} onChange={(e) => setEditForm({...editForm, disability_type_id: parseInt(e.target.value)})}
                           className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none">
                           <option value={0}>Select Type...</option>
-                          {lookups?.disability_types.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                          {lookups?.disability_types.filter(d => d.name !== 'Other').map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                          {lookups?.disability_types.filter(d => d.name === 'Other').map(d => (<option key={d.id} value={d.id}>Others (Specify)</option>))}
                         </select>
                       </div>
-                      {lookups?.disability_types.find(d => d.id === editForm.disability_type_id)?.name === 'Other' && (
+                      {(lookups?.disability_types.find(d => d.id === editForm.disability_type_id)?.name === 'Other' || editForm.disability_details) && (
                         <div>
                           <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">Other Disability (Specify)</label>
                           <input 
@@ -1728,7 +1874,7 @@ const ListPwd: React.FC<ListPwdProps> = ({ onModalStateChange }) => {
                       <CreditCard className="text-teal-600" size={20} />
                       <h4 className="text-lg font-bold text-slate-900 dark:text-white">Government IDs</h4>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <label className="text-xs text-slate-500 uppercase tracking-wide mb-1 block">SSS No.</label>
                         <input type="text" value={editForm.sss_no} onChange={(e) => setEditForm({...editForm, sss_no: e.target.value})}

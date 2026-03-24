@@ -18,6 +18,7 @@ class PendingRegistration extends Model
         'reviewed_by',
         'reviewed_at',
         'review_notes',
+        'photo_path',
     ];
 
     protected $casts = [

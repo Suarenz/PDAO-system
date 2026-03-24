@@ -261,7 +261,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-bold text-[#555555] uppercase tracking-wider ml-1">Username</label>
                     <input 

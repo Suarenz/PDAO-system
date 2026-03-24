@@ -17,7 +17,7 @@ export const LIVING_ARRANGEMENT_DATA: { name: string; value: number; fill: strin
 export const SUPPORT_TYPE_DATA: { name: string; value: number; fill: string }[] = [];
 
 export const BARANGAY_OPTIONS = [
-  "All Barangays", "Anibong", "Poblacion I", "Poblacion II", "Biñan", "Buboy", 
+  "All Barangays", "Anibong", "Poblacion I", "Poblacion II", "Bi\u00f1an", "Buboy", 
   "Cabanbanan", "Calusiche", "Dingin", "Lambac", "Layugan", "Magdapio", 
   "Maulawin", "Pinagsanjan", "Sabang", "Sampaloc", "San Isidro"
 ];
@@ -37,9 +37,9 @@ const generateYearOptions = (): string[] => {
 export const YEARS_OPTIONS = generateYearOptions();
 
 export const DISABILITY_OPTIONS = [
-  "All Types", "Cancer (RA11215)", "Chronic Illness", "Deaf or Hard of Hearing", "Intellectual Disability",
-  "Learning Disability", "Mental Disability", "Orthopedic Disability", "Physical Disability", "Psychosocial Disability",
-  "Rare Disease (RA10747)", "Speech and Language Impairment", "Visual Disability"
+  "All Types", "Cancer (RA 11215)", "Deaf or Hard of Hearing", "Intellectual Disability",
+  "Learning Disability", "Mental Disability", "Physical Disability", "Psychosocial Disability",
+  "Rare Disease (RA 10747)", "Speech & Language Impairment", "Visual Disability"
 ];
 
 export const RECENT_ACTIVITY_DATA: RecentActivity[] = [];

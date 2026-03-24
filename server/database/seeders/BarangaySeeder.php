@@ -18,7 +18,7 @@ class BarangaySeeder extends Seeder
             ['name' => 'Poblacion I', 'code' => 'B01'],
             ['name' => 'Poblacion II', 'code' => 'B02'],
             ['name' => 'Barangay III', 'code' => 'B03'],
-            ['name' => 'Biñan', 'code' => 'BIN'],
+            ['name' => "Bi\u{00F1}an", 'code' => 'BIN'],
             ['name' => 'Buboy', 'code' => 'BUB'],
             ['name' => 'Cabanbanan', 'code' => 'CAB'],
             ['name' => 'Calusiche', 'code' => 'CAL'],
